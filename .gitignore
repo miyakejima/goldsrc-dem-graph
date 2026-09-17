@@ -1,0 +1,44 @@
+# OS / editor state
+Thumbs.db
+.DS_Store
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Local runtime state
+.dev-server.pid
+dev-server.err.log
+dev-server.out.log
+
+# JavaScript build artifacts
+node_modules/
+dist/
+**/dist/
+.vite/
+.data/
+*.tsbuildinfo
+
+# Rust build artifacts
+parser-rs/target/
+bin/
+*.exe
+
+# Generated analysis workspace
+re_data/*
+!re_data/.gitkeep
+!re_data/README.md
+!re_data/pairs/
+re_data/pairs/*
+!re_data/pairs/.gitkeep
+
+# Logs / temp files
+*.log
+*.tmp
+
+# Archives
+*.zip
+*.7z
+*.rar
