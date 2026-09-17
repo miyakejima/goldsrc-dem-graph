@@ -37,14 +37,6 @@
 
 ---
 
-<p align="center">
-  <a href="https://miyakejima.github.io/goldsrc-dem-graph/">
-    <img src="./docs/goldsrc-dem-graph-demo.gif" alt="goldsrc-dem-graph demo" width="100%" style="border-radius: 6px; border: 1px solid #222222; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
-  </a>
-</p>
-
----
-
 ## Workstation Previews
 
 All screenshots reflect the default **True AMOLED `#000000` Black Theme**, engineered for exact color parity with the visualizer canvas.
