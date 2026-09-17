@@ -1,0 +1,17 @@
+{
+  "type": 0,
+  "parsingStatus": 3,
+  "analysingStatus": 3,
+  "isUploader": true,
+  "filename": "bn_tombbhop_rawe_0225.06",
+  "tasks": {
+    "init_db": 2,
+    "populate_demo_info": 2,
+    "physics_runner": 2,
+    "bhop_patterns": 2,
+    "static_checks": 2,
+    "generate_graph_json": 2
+  },
+  "needReparse": false,
+  "needReanalyse": false
+}

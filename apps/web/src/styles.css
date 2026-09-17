@@ -1,0 +1,310 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #000000;
+  color: #ffffff;
+  font-family: Roboto, Arial, sans-serif;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
+}
+
+.graph-viewer-root {
+  width: 100%;
+  height: 100%;
+  background: #000000;
+}
+
+.graph-shell {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #000000;
+  overflow: hidden;
+}
+
+/* 539_beautified.js line 2202: Toggle fullscreen button */
+.toggle-fullscreen {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: 60px;
+  color: #88aa00;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1.15;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  z-index: 10;
+}
+
+/* Top HUD panel: exactly 130px high, border at y=130 */
+.top-panel {
+  position: relative;
+  height: 130px;
+  background: #000000;
+  border-bottom: 1px solid #888888;
+  display: grid;
+  grid-template-columns: 80px 215px 215px 215px 205px 200px 1fr;
+}
+
+.hud-col {
+  padding-top: 5px;
+  height: 125px;
+}
+
+.hud-col.col-1 { grid-column: 2; }
+.hud-col.col-2 { grid-column: 3; }
+.hud-col.col-3 { grid-column: 4; }
+.hud-col.col-4 { grid-column: 5; }
+.hud-col.col-5 { grid-column: 6; }
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 15px;
+  padding: 0 5px;
+}
+
+.hud-lbl {
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: bold;
+  color: #888888;
+  white-space: nowrap;
+}
+
+.hud-lbl.time-lbl {
+  color: #dddddd;
+}
+
+.hud-val {
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: bold;
+  color: #dddddd;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.hud-stacked {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 5px;
+}
+
+.hud-val-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+/* Tabs switcher: 30px high, from y=130 to 160 */
+.line-tabs {
+  height: 30px;
+  background: #000000;
+  border-bottom: 1px solid #888888;
+  display: flex;
+  align-items: center;
+  padding-left: 90px;
+  gap: 20px;
+}
+
+.tab-item {
+  border: 0;
+  background: transparent;
+  color: #ffffff;
+  opacity: 0.5;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: normal;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tab-item:hover {
+  opacity: 1;
+  color: #ffff00;
+}
+
+.tab-item.active {
+  opacity: 1;
+  color: #00ffff;
+}
+
+/* Main Visualizer Area */
+.graph-container-wrap {
+  display: flex;
+  position: relative;
+  width: 100%;
+  background: #000000;
+}
+
+/* Left Gutter: exactly 80px */
+.left-axis-gutter {
+  width: 80px;
+  flex-shrink: 0;
+  background: #000000;
+  position: relative;
+  z-index: 5;
+  user-select: none;
+}
+
+.left-gutter-svg {
+  display: block;
+}
+
+.axis-label {
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.lane-label-text {
+  fill: #888888;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+/* Viewport: horizontally scrollable, 1 frame = 1 pixel */
+.graph-viewport {
+  flex: 1;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  position: relative;
+  background: #000000;
+  cursor: crosshair;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.graph-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.main-graph {
+  display: block;
+  overflow: visible;
+  background: #000000;
+}
+
+/* Authentic Unique-KZ Bottom Scrollbar */
+.bottom-scrollbar {
+  position: fixed;
+  bottom: 0;
+  left: 80px;
+  right: 0;
+  height: 20px;
+  background: #888888;
+  z-index: 100;
+  cursor: pointer;
+  user-select: none;
+}
+
+.scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  height: 20px;
+  width: 100px;
+  background: #666666;
+  cursor: grab;
+}
+
+.scrollbar-thumb:active {
+  cursor: grabbing;
+}
+
+/* Mouse Tooltip */
+.mouse-tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid #444444;
+  border-radius: 3px;
+  padding: 4px 8px;
+  color: #ffffff;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: bold;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.mouse-tooltip-row {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.mouse-tooltip-row span {
+  color: #888888;
+}
+
+.mouse-tooltip-row strong {
+  color: #ffffff;
+}
+
+/* Jump Popup */
+.jump-popup {
+  position: absolute;
+  width: 210px;
+  background: rgba(102, 102, 102, 0.75);
+  border-radius: 5px;
+  padding: 6px 8px;
+  color: #ffffff;
+  font-family: Roboto, Arial, sans-serif;
+  pointer-events: auto;
+  z-index: 25;
+}
+
+.jump-popup h3 {
+  margin: 0 0 6px;
+  color: #ffff00;
+  text-align: center;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+.jump-popup p {
+  margin: 2px 0;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.jump-popup span {
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.jump-popup strong {
+  color: #ffffff;
+  font-weight: bold;
+  text-align: right;
+}
+
+.copy-hint {
+  color: #ffff00;
+  text-align: center;
+  font-size: 12px;
+  font-weight: bold;
+  margin-top: 6px;
+}
+
+.viewer-status {
+  padding: 20px;
+  font-size: 14px;
+}
+
+.viewer-status.error {
+  color: #ff3333;
+}

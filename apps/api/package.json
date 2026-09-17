@@ -1,0 +1,27 @@
+{
+  "name": "@kz-rebuild/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^10.0.2",
+    "@fastify/multipart": "^9.0.3",
+    "@kz-rebuild/analytics": "0.1.0",
+    "@kz-rebuild/mock-data": "0.1.0",
+    "@kz-rebuild/parser": "0.1.0",
+    "@kz-rebuild/physics": "0.1.0",
+    "@kz-rebuild/shared-types": "0.1.0",
+    "@kz-rebuild/storage": "0.1.0",
+    "fastify": "^5.2.2",
+    "nanoid": "^5.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.11",
+    "tsx": "^4.19.3"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "overview": {
+    "demoType": 0,
+    "map": {
+      "name": "bn_tombbhop"
+    },
+    "player": {
+      "name": "raweKZRA",
+      "steamId": "76561198045705249"
+    },
+    "completionTime": 145.06102752685547,
+    "version": {
+      "demo": 5,
+      "network": 48
+    },
+    "gameDll": "cstrike",
+    "svCheats": false
+  },
+  "overviewAdditional": {
+    "filename": "bn_tombbhop_rawe_0225.06"
+  },
+  "playersUserInfo": [
+    {
+      "bottomcolor": "6",
+      "cl_dlmax": "512",
+      "cl_lc": "1",
+      "cl_lw": "1",
+      "cl_updaterate": "102",
+      "topcolor": "30",
+      "lang": "cn",
+      "boost": "1",
+      "rate": "100000",
+      "name": "raweKZRA",
+      "*sid": "76561198045705249",
+      "model": "gign"
+    }
+  ]
+}

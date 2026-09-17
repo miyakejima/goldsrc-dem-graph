@@ -1,0 +1,84 @@
+{
+  "cvars": [
+    {
+      "cvar": "sv_gravity",
+      "reference": 800,
+      "0": 800
+    },
+    {
+      "cvar": "sv_stopspeed",
+      "reference": 75,
+      "0": 75
+    },
+    {
+      "cvar": "sv_maxspeed",
+      "reference": 320,
+      "0": 320
+    },
+    {
+      "cvar": "sv_spectatormaxspeed",
+      "reference": 500,
+      "0": 500
+    },
+    {
+      "cvar": "sv_accelerate",
+      "reference": 5,
+      "0": 5
+    },
+    {
+      "cvar": "sv_airaccelerate",
+      "reference": 10,
+      "0": 10
+    },
+    {
+      "cvar": "sv_wateraccelerate",
+      "reference": 10,
+      "0": 10
+    },
+    {
+      "cvar": "sv_friction",
+      "reference": 4,
+      "0": 4
+    },
+    {
+      "cvar": "edgefriction",
+      "reference": 2,
+      "0": 2
+    },
+    {
+      "cvar": "sv_waterfriction",
+      "reference": 1,
+      "0": 1
+    },
+    {
+      "cvar": "sv_bounce",
+      "reference": 1,
+      "0": 1
+    },
+    {
+      "cvar": "sv_stepsize",
+      "reference": 18,
+      "0": 18
+    },
+    {
+      "cvar": "sv_maxvelocity",
+      "reference": 2000,
+      "0": 2000
+    },
+    {
+      "cvar": "mp_footsteps",
+      "reference": 1,
+      "0": 1
+    },
+    {
+      "cvar": "sv_rollangle",
+      "reference": 0,
+      "0": 0
+    },
+    {
+      "cvar": "sv_rollspeed",
+      "reference": 0,
+      "0": 0
+    }
+  ]
+}

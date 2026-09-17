@@ -16,7 +16,9 @@ dev-server.out.log
 # JavaScript build artifacts
 node_modules/
 dist/
+**/dist/
 .vite/
+.data/
 
 # Rust build artifacts
 parser-rs/target/
