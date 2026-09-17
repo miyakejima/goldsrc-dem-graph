@@ -907,6 +907,12 @@ export function App() {
       if (e.shiftKey) step = 10;
       if (e.ctrlKey) step = 100;
 
+      if (e.code === "Space") {
+        e.preventDefault();
+        setIsPlaying((prev) => !prev);
+        return;
+      }
+
       if (e.code === "ArrowLeft" || e.code === "KeyA") {
         e.preventDefault();
         setHoverFrameIndex((prev) => {
