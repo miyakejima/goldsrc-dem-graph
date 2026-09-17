@@ -21,17 +21,6 @@
 </p>
 
 <p align="center">
-  <a href="https://miyakejima.github.io/goldsrc-dem-graph/"><strong>Launch Live App</strong></a> ·
-  <a href="#workstation-previews">Workstation Previews</a> ·
-  <a href="#telemetry--metrics">Telemetry & Metrics</a> ·
-  <a href="#jump-techniques-parity">Jump Techniques</a> ·
-  <a href="#keyboard-ergonomics">Keyboard Controls</a> ·
-  <a href="#architecture">Architecture</a> ·
-  <a href="#local-development">Local Development</a>
-</p>
-
-<p align="center">
-  Open and analyze demos directly in your browser with zero installation:<br>
   <a href="https://miyakejima.github.io/goldsrc-dem-graph/"><strong>https://miyakejima.github.io/goldsrc-dem-graph/</strong></a>
 </p>
 
