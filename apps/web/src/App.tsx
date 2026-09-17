@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { getGraph, getGraphViewer, uploadDemo } from "./api";
+import { clientDemoStore, getGraph, getGraphViewer, uploadDemo } from "./api";
+import { parseDemoFileLocally } from "./clientParser";
 import type { GraphPayload, GraphViewerDataset, GraphViewerJump } from "@kz-rebuild/shared-types";
 
 type LineKey = "engineFps" | "realFps" | "mouseX" | "mouseXSpeed" | "jumpHeight";
@@ -399,6 +400,27 @@ export function App() {
     setBusy(true);
     setErrorText("");
     try {
+      // 1. In-browser client-side parsing (works offline & on GitHub Pages with 0 server)
+      try {
+        const localData = await parseDemoFileLocally(file);
+        const newDemoId = localData.meta.demoId;
+        clientDemoStore.set(newDemoId, localData);
+        setDemoId(newDemoId);
+        setDataset(localData);
+        setHoverFrameIndex(localData.meta.startFrame ?? 1);
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollLeft = 0;
+        }
+        const url = new URL(window.location.href);
+        url.searchParams.set("demo", newDemoId);
+        url.searchParams.delete("frame");
+        window.history.pushState({}, "", url.toString());
+        return;
+      } catch (localErr) {
+        console.warn("Client-side parse failed, falling back to server upload:", localErr);
+      }
+
+      // 2. Server upload fallback
       const res = await uploadDemo(file);
       const uploadedId = res.demos[0]?.id;
       if (uploadedId) {
@@ -410,7 +432,7 @@ export function App() {
         await loadData(uploadedId);
       }
     } catch (err) {
-      setErrorText(err instanceof Error ? err.message : "Failed to upload demo.");
+      setErrorText(err instanceof Error ? err.message : "Failed to load demo.");
     } finally {
       setBusy(false);
     }

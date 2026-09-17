@@ -19,6 +19,7 @@ dist/
 **/dist/
 .vite/
 .data/
+*.tsbuildinfo
 
 # Rust build artifacts
 parser-rs/target/

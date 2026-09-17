@@ -27,8 +27,36 @@ export function uploadDemo(file: File): Promise<UploadResponse> {
   });
 }
 
-export function getGraphViewer(id: string): Promise<GraphViewerDataset> {
-  return requestJson<GraphViewerDataset>(`/api/demo/${id}/graph-viewer`);
+export const clientDemoStore = new Map<string, GraphViewerDataset>();
+
+export async function getGraphViewer(id: string): Promise<GraphViewerDataset> {
+  if (clientDemoStore.has(id)) {
+    return clientDemoStore.get(id)!;
+  }
+  if (id === "sample" || !apiBase) {
+    const baseUrl = import.meta.env.BASE_URL || "./";
+    const sampleUrl = `${baseUrl.endsWith("/") ? baseUrl : baseUrl + "/"}sample-dataset.json`;
+    const res = await fetch(sampleUrl);
+    if (res.ok) {
+      const data = (await res.json()) as GraphViewerDataset;
+      clientDemoStore.set("sample", data);
+      return data;
+    }
+  }
+  try {
+    return await requestJson<GraphViewerDataset>(`/api/demo/${id}/graph-viewer`);
+  } catch (err) {
+    // Static fallback for GitHub Pages or standalone client-side usage
+    const baseUrl = import.meta.env.BASE_URL || "./";
+    const sampleUrl = `${baseUrl.endsWith("/") ? baseUrl : baseUrl + "/"}sample-dataset.json`;
+    const res = await fetch(sampleUrl);
+    if (res.ok) {
+      const data = (await res.json()) as GraphViewerDataset;
+      clientDemoStore.set("sample", data);
+      return data;
+    }
+    throw err;
+  }
 }
 
 export function getGraph(id: string): Promise<GraphPayload> {
