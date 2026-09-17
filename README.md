@@ -31,16 +31,15 @@ You can run this application entirely in your browser without installing anythin
 
 ---
 
-## GitHub Actions & Deployment
+## Deployment & Updates
 
-This repository includes an automated GitHub Pages deployment workflow in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+This repository deploys directly to GitHub Pages via the `gh-pages` branch.
 
-### Enabling GitHub Pages in your Fork / Repo:
-1. Navigate to your repository on GitHub.
-2. Go to **Settings** → **Pages**.
-3. Under **Build and deployment** → **Source**, select **GitHub Actions**.
-4. Push to `main` (or run the workflow manually under **Actions** → **Deploy to GitHub Pages**).
-5. Your site is live at `https://<username>.github.io/<repository>/`!
+To deploy updates to GitHub Pages:
+```bash
+npm run deploy
+```
+This builds the web workspace and publishes `apps/web/dist` directly to the `gh-pages` branch, served live at `https://miyakejima.github.io/goldsrc-dem-graph/`.
 
 ---
 

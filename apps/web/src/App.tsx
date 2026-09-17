@@ -2,6 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { clientDemoStore, getGraph, getGraphViewer, uploadDemo } from "./api";
 import { parseDemoFileLocally } from "./clientParser";
+import { AppHeader } from "./components/AppHeader";
+import { DemoLibrary } from "./components/DemoLibrary";
+import {
+  getAllDemos,
+  getDemoRecord,
+  saveDemoRecord,
+  deleteDemoRecord,
+  toggleDemoFavorite,
+  type SavedDemoRecord
+} from "./storage/db";
 import type { GraphPayload, GraphViewerDataset, GraphViewerJump } from "@kz-rebuild/shared-types";
 
 type LineKey = "engineFps" | "realFps" | "mouseX" | "mouseXSpeed" | "jumpHeight";
@@ -27,14 +37,6 @@ type TechniqueVm = {
   framesInDuck?: number;
   preJumpVelocityJumpoff?: number;
   preJumpVelocityBeforeJumpoff?: number;
-};
-
-const lineConfig: Record<LineKey, { label: string; color: string }> = {
-  engineFps: { label: "engine fps", color: "#ffa000" },
-  realFps: { label: "real fps", color: "#f0f0f0" },
-  mouseX: { label: "mouseX", color: "#ffffff" },
-  mouseXSpeed: { label: "mouseX speed", color: "#f5f5f5" },
-  jumpHeight: { label: "jump height", color: "#f5f5f5" }
 };
 
 const laneConfigs: Array<{ key: string; label: string; height: number }> = [
@@ -95,7 +97,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-// 539_beautified.js line 274: y = function(t)
 function formatServerTime(seconds: number): string {
   if (!Number.isFinite(seconds)) return "00:00.00";
   const e = Math.floor(100 * seconds);
@@ -131,7 +132,6 @@ function formatButtonsList(buttons: number): string[] {
     .map(([name]) => name);
 }
 
-// 539_beautified.js line 512: only commands at exact frame t
 function formatCommandsAtFrame(commands: Record<string, string> | undefined, frame: number): string[] {
   if (!commands) return [];
   const str = commands[String(frame)];
@@ -175,44 +175,6 @@ function buildSegmentsWithMinGap(values: number[], minGap = 1): Segment[] {
     }
   }
   return merged;
-}
-
-function buildSequenceRects(
-  values: number[],
-  getYAndColor: (val: number, idx: number) => { y: number; color: string } | null
-): Array<{ x: number; y: number; width: number; color: string }> {
-  const rects: Array<{ x: number; y: number; width: number; color: string }> = [];
-  let currentStart = -1;
-  let currentY = -1;
-  let currentColor = "";
-
-  for (let i = 0; i < values.length; i++) {
-    const res = getYAndColor(values[i] ?? 0, i);
-    if (!res) {
-      if (currentStart !== -1) {
-        rects.push({ x: currentStart, y: currentY, width: i - currentStart, color: currentColor });
-        currentStart = -1;
-      }
-      continue;
-    }
-
-    if (currentStart === -1) {
-      currentStart = i;
-      currentY = res.y;
-      currentColor = res.color;
-    } else if (res.y !== currentY || res.color !== currentColor) {
-      rects.push({ x: currentStart, y: currentY, width: i - currentStart, color: currentColor });
-      currentStart = i;
-      currentY = res.y;
-      currentColor = res.color;
-    }
-  }
-
-  if (currentStart !== -1) {
-    rects.push({ x: currentStart, y: currentY, width: values.length - currentStart, color: currentColor });
-  }
-
-  return rects;
 }
 
 function computeJumpCommandLines(
@@ -293,19 +255,6 @@ function computeJumpHoldSegments(
   return buildSegmentsWithMinGap(mask, 1);
 }
 
-function buildPressEvents(values: number[], color: string): EventPoint[] {
-  const events: EventPoint[] = [];
-  let prev = values[0] ?? 0;
-  for (let i = 1; i < values.length; i += 1) {
-    const current = values[i] ?? 0;
-    if (current !== 0 && prev === 0) {
-      events.push({ index: i, color });
-    }
-    prev = current;
-  }
-  return events;
-}
-
 function getPlotScale(lineKey: LineKey) {
   if (lineKey === "mouseX") {
     return {
@@ -351,7 +300,7 @@ function getPlotScale(lineKey: LineKey) {
     };
   }
 
-  // engineFps & realFps (drawingHeight = 155, offset = 25)
+  // engineFps & realFps
   return {
     min: 0,
     max: 110,
@@ -376,6 +325,17 @@ function jumpTitle(jump: GraphViewerJump | TechniqueVm): string {
 }
 
 export function App() {
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("kz_theme");
+      if (saved === "dark" || saved === "light") return saved;
+    }
+    return "light"; // Default to clean white theme
+  });
+
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  const [savedDemos, setSavedDemos] = useState<SavedDemoRecord[]>([]);
+
   const [demoId, setDemoId] = useState<string>("sample");
   const [dataset, setDataset] = useState<GraphViewerDataset | null>(null);
   const [busy, setBusy] = useState(false);
@@ -391,6 +351,61 @@ export function App() {
   const scrollbarTrackRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("kz_theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+  };
+
+  const lineConfig: Record<LineKey, { label: string; color: string }> = {
+    engineFps: { label: "engine fps", color: "#ffa000" },
+    realFps: { label: "real fps", color: "#f0f0f0" },
+    mouseX: { label: "mouseX", color: "#ffffff" },
+    mouseXSpeed: { label: "mouseX speed", color: "#f5f5f5" },
+    jumpHeight: { label: "jump height", color: "#f5f5f5" }
+  };
+
+  const refreshLibrary = async () => {
+    try {
+      const list = await getAllDemos();
+      setSavedDemos(list);
+      return list;
+    } catch (err) {
+      console.warn("Failed to load demos from IndexedDB:", err);
+      return [];
+    }
+  };
+
+  // Seed IndexedDB with sample demo if empty
+  useEffect(() => {
+    void (async () => {
+      const list = await refreshLibrary();
+      if (list.length === 0) {
+        try {
+          const sampleData = await getGraphViewer("sample");
+          const duration = sampleData.dense.time[sampleData.dense.time.length - 1] || 85.35;
+          const seedRecord: SavedDemoRecord = {
+            id: "sample",
+            filename: sampleData.meta.filename || "sample_betty.dem",
+            mapname: sampleData.meta.mapname || "kz_ea_sybhop",
+            frames: sampleData.meta.frames,
+            duration,
+            createdAt: Date.now(),
+            isFavorite: true,
+            dataset: sampleData
+          };
+          await saveDemoRecord(seedRecord);
+          await refreshLibrary();
+        } catch (err) {
+          console.warn("Failed to seed sample demo in IndexedDB:", err);
+        }
+      }
+    })();
+  }, []);
+
   const handleFileUpload = async (file: File) => {
     if (!file) return;
     if (!file.name.toLowerCase().endsWith(".dem")) {
@@ -400,7 +415,7 @@ export function App() {
     setBusy(true);
     setErrorText("");
     try {
-      // 1. In-browser client-side parsing (works offline & on GitHub Pages with 0 server)
+      // 1. In-browser client-side parsing
       try {
         const localData = await parseDemoFileLocally(file);
         const newDemoId = localData.meta.demoId;
@@ -411,6 +426,22 @@ export function App() {
         if (scrollContainerRef.current) {
           scrollContainerRef.current.scrollLeft = 0;
         }
+
+        // Save to IndexedDB
+        const duration = localData.dense.time[localData.dense.time.length - 1] || 0;
+        const newRecord: SavedDemoRecord = {
+          id: newDemoId,
+          filename: localData.meta.filename,
+          mapname: localData.meta.mapname,
+          frames: localData.meta.frames,
+          duration,
+          createdAt: Date.now(),
+          isFavorite: false,
+          dataset: localData
+        };
+        await saveDemoRecord(newRecord);
+        await refreshLibrary();
+
         const url = new URL(window.location.href);
         url.searchParams.set("demo", newDemoId);
         url.searchParams.delete("frame");
@@ -438,10 +469,44 @@ export function App() {
     }
   };
 
+  const handleBatchUpload = async (files: FileList | File[]) => {
+    for (const file of Array.from(files)) {
+      await handleFileUpload(file);
+    }
+  };
+
+  const handleSelectDemo = (record: SavedDemoRecord) => {
+    setDemoId(record.id);
+    setDataset(record.dataset);
+    clientDemoStore.set(record.id, record.dataset);
+    setHoverFrameIndex(record.dataset.meta.startFrame ?? 1);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollLeft = 0;
+    }
+    const url = new URL(window.location.href);
+    url.searchParams.set("demo", record.id);
+    url.searchParams.delete("frame");
+    window.history.pushState({}, "", url.toString());
+    setIsLibraryOpen(false);
+  };
+
+  const handleToggleFavorite = async (id: string) => {
+    await toggleDemoFavorite(id);
+    await refreshLibrary();
+  };
+
+  const handleDeleteDemo = async (id: string) => {
+    await deleteDemoRecord(id);
+    const updated = await refreshLibrary();
+    if (demoId === id && updated.length > 0) {
+      handleSelectDemo(updated[0]);
+    }
+  };
+
   const handleFileInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      void handleFileUpload(file);
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      void handleBatchUpload(files);
     }
     event.target.value = "";
   };
@@ -454,9 +519,9 @@ export function App() {
     const handleDrop = (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      const file = e.dataTransfer?.files?.[0];
-      if (file) {
-        void handleFileUpload(file);
+      const files = e.dataTransfer?.files;
+      if (files && files.length > 0) {
+        void handleBatchUpload(files);
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -501,6 +566,12 @@ export function App() {
     setBusy(true);
     setErrorText("");
     try {
+      const stored = await getDemoRecord(id);
+      if (stored) {
+        setDataset(stored.dataset);
+        clientDemoStore.set(id, stored.dataset);
+        return;
+      }
       const data = await getGraphViewer(id);
       setDataset(data);
     } catch (err) {
@@ -530,13 +601,10 @@ export function App() {
   }, [dataset]);
 
   const graphWidth = Math.max(1, totalFrames);
-  // Unique-KZ class f: position() { return new Point(0, 15); } - upper graph container top offset is 15px
   const plotTop = 15;
 
-  // 539_beautified.js line 2309: barsContainer.position.y = bounds.height - barsDrawingHeight
-  // Top HUD = 130px, Tabs = 30px, Scrollbar = 20px. GraphicWindow height = viewportHeight - 180
-  // barsDrawingHeight = 260px.
-  const graphicWindowHeight = Math.max(450, viewportHeight - 180);
+  // Header = 48px. GraphicWindow height = viewportHeight - 180 - 48
+  const graphicWindowHeight = Math.max(450, viewportHeight - 228);
   const lanesTop = Math.max(195, graphicWindowHeight - 260);
   const graphHeight = lanesTop + 247 + 5;
   const cursorX = frameIndex;
@@ -572,7 +640,7 @@ export function App() {
     return segments;
   }, [lineKey, series, plotTop]);
 
-  // EngineFps rects/points (NO vertical drop lines)
+  // EngineFps rects/points
   const engineFpsPoints = useMemo(() => {
     if (lineKey !== "engineFps" || series.length === 0) return [];
     const points: Array<{ x: number; y: number; color: string }> = [];
@@ -581,12 +649,13 @@ export function App() {
       if (fps <= 0) continue;
       const isOver100 = fps > 100;
       const y = plotTop + (isOver100 ? 0 : 25 + ((100 - fps) * 155) / 100);
-      points.push({ x: i, y, color: isOver100 ? "#ff0000" : "#ffa000" });
+      const color = isOver100 ? "#ff0000" : "#ffa000";
+      points.push({ x: i, y, color });
     }
     return points;
   }, [lineKey, series, plotTop]);
 
-  // RealFps rects/points (pure red #ff0000, 1:1 matching Unique-KZ)
+  // RealFps rects/points
   const realFpsPoints = useMemo(() => {
     if (lineKey !== "realFps" || !dataset?.dense.realFps) return [];
     const arr = dataset.dense.realFps;
@@ -600,7 +669,7 @@ export function App() {
     return points;
   }, [lineKey, dataset, plotTop]);
 
-  // MouseXSpeed points ((11.25 - deltaMouseX) * 8 in #aaaaaa, 1:1 matching Unique-KZ)
+  // MouseXSpeed points
   const mouseXSpeedPoints = useMemo(() => {
     if (lineKey !== "mouseXSpeed" || !dataset?.dense.mouseXSpeed) return [];
     const arr = dataset.dense.mouseXSpeed;
@@ -615,7 +684,7 @@ export function App() {
     return points;
   }, [lineKey, dataset, plotTop]);
 
-  // JumpHeight curves: Demo (measured, #aaaaaa) and Calc (ballistic, #00ffff)
+  // JumpHeight curves
   const jumpHeightPoints = useMemo(() => {
     if (lineKey !== "jumpHeight" || !dataset) return { demo: [], calc: [] };
     const demoPoints: Array<{ x: number; y: number }> = [];
@@ -664,7 +733,6 @@ export function App() {
     }));
   }, [dataset]);
 
-  // Two-tone movement segments
   const forwardBase = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.forward, 1) : [], [dataset]);
   const backBase = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.back, 1) : [], [dataset]);
   const moveleftBase = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.moveleft, 1) : [], [dataset]);
@@ -673,7 +741,6 @@ export function App() {
   const groundSegments = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.ground, 2) : [], [dataset]);
   const duckSegments = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.duck, 1) : [], [dataset]);
 
-  // Duckstate: state 1 (transition: orange) vs state 2 (ducked: green)
   const duckstate1Segments = useMemo(() => {
     if (!dataset) return [];
     const mask = dataset.lanes.duckstate.map((v) => (v === 1 ? 1 : 0));
@@ -683,59 +750,6 @@ export function App() {
   const duckstate2Segments = useMemo(() => {
     if (!dataset) return [];
     const mask = dataset.lanes.duckstate.map((v) => (v === 2 ? 1 : 0));
-    return buildSegmentsWithMinGap(mask, 1);
-  }, [dataset]);
-
-  // Turning segments for movement lanes
-  const turnUpSegments = useMemo(() => {
-    if (!dataset?.dense.pitch) return [];
-    const p = dataset.dense.pitch;
-    const mask = p.map((val, idx) => {
-      if (idx === 0) return 0;
-      let diff = val - p[idx - 1];
-      while (diff < -180) diff += 360;
-      while (diff > 180) diff -= 360;
-      return diff > 0 ? 1 : 0;
-    });
-    return buildSegmentsWithMinGap(mask, 1);
-  }, [dataset]);
-
-  const turnDownSegments = useMemo(() => {
-    if (!dataset?.dense.pitch) return [];
-    const p = dataset.dense.pitch;
-    const mask = p.map((val, idx) => {
-      if (idx === 0) return 0;
-      let diff = val - p[idx - 1];
-      while (diff < -180) diff += 360;
-      while (diff > 180) diff -= 360;
-      return diff < 0 ? 1 : 0;
-    });
-    return buildSegmentsWithMinGap(mask, 1);
-  }, [dataset]);
-
-  const turnLeftSegments = useMemo(() => {
-    if (!dataset?.dense.mouseX) return [];
-    const y = dataset.dense.mouseX;
-    const mask = y.map((val, idx) => {
-      if (idx === 0) return 0;
-      let diff = val - y[idx - 1];
-      while (diff < -180) diff += 360;
-      while (diff > 180) diff -= 360;
-      return diff > 0 ? 1 : 0;
-    });
-    return buildSegmentsWithMinGap(mask, 1);
-  }, [dataset]);
-
-  const turnRightSegments = useMemo(() => {
-    if (!dataset?.dense.mouseX) return [];
-    const y = dataset.dense.mouseX;
-    const mask = y.map((val, idx) => {
-      if (idx === 0) return 0;
-      let diff = val - y[idx - 1];
-      while (diff < -180) diff += 360;
-      while (diff > 180) diff -= 360;
-      return diff < 0 ? 1 : 0;
-    });
     return buildSegmentsWithMinGap(mask, 1);
   }, [dataset]);
 
@@ -858,30 +872,13 @@ export function App() {
         setHoverFrameIndex(start);
         if (scrollContainerRef.current) {
           scrollContainerRef.current.scrollLeft = 0;
-          setScrollLeft(0);
         }
       } else if (e.code === "End") {
         e.preventDefault();
-        setHoverFrameIndex(totalFrames - 1);
+        const stop = dataset?.meta.stopFrame ?? totalFrames - 1;
+        setHoverFrameIndex(stop);
         if (scrollContainerRef.current) {
           scrollContainerRef.current.scrollLeft = maxScroll;
-          setScrollLeft(maxScroll);
-        }
-      } else if (e.code === "PageDown") {
-        e.preventDefault();
-        if (scrollContainerRef.current) {
-          const vis = scrollContainerRef.current.clientWidth;
-          const next = clamp(scrollContainerRef.current.scrollLeft + vis, 0, maxScroll);
-          scrollContainerRef.current.scrollLeft = next;
-          setScrollLeft(next);
-        }
-      } else if (e.code === "PageUp") {
-        e.preventDefault();
-        if (scrollContainerRef.current) {
-          const vis = scrollContainerRef.current.clientWidth;
-          const next = clamp(scrollContainerRef.current.scrollLeft - vis, 0, maxScroll);
-          scrollContainerRef.current.scrollLeft = next;
-          setScrollLeft(next);
         }
       }
     };
@@ -954,348 +951,373 @@ export function App() {
     : null;
 
   return (
-    <div className="graph-viewer-root">
+    <div className="app-shell" data-theme={theme}>
+      <AppHeader
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        activeDemoName={dataset?.meta.filename || demoId}
+        activeMapName={dataset?.meta.mapname || ""}
+        demoCount={savedDemos.length}
+        onOpenLibrary={() => setIsLibraryOpen(true)}
+        onTriggerUpload={() => fileInputRef.current?.click()}
+      />
+
       <input
         ref={fileInputRef}
         type="file"
         accept=".dem"
+        multiple
         style={{ display: "none" }}
         onChange={handleFileInputChange}
       />
-      {dataset && hudData && (
-        <div className="graph-shell">
-          {/* Top HUD Panel: 5 exact columns matching Unique-KZ */}
-          <section className="top-panel">
-            <div className="toggle-fullscreen" onClick={() => document.documentElement.requestFullscreen?.()}>
-              Toggle<br />fullscreen
-            </div>
 
-            {/* Column 1: Frame info */}
-            <div className="hud-col col-1">
-              <div className="hud-row"><span className="hud-lbl">Frame</span><strong className="hud-val">{hudData.frame}</strong></div>
-              <div className="hud-row"><span className="hud-lbl time-lbl">Server Time</span><strong className="hud-val">{hudData.serverTime}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Real fps</span><strong className="hud-val">{hudData.realFps}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Engine fps</span><strong className="hud-val">{hudData.engineFps}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Frame length</span><strong className="hud-val">{hudData.frameLength}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">MSec</span><strong className="hud-val">{hudData.msec}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Movetype</span><strong className="hud-val">{hudData.movetype}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Health</span><strong className="hud-val">{hudData.health}</strong></div>
-            </div>
+      <DemoLibrary
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
+        demos={savedDemos}
+        activeDemoId={demoId}
+        onSelectDemo={handleSelectDemo}
+        onToggleFavorite={handleToggleFavorite}
+        onDeleteDemo={handleDeleteDemo}
+        onUploadFiles={handleBatchUpload}
+      />
 
-            {/* Column 2: Origin & Velocity */}
-            <div className="hud-col col-2">
-              <div className="hud-row"><span className="hud-lbl">Origin X</span><strong className="hud-val">{hudData.originX}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Origin Y</span><strong className="hud-val">{hudData.originY}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Origin Z</span><strong className="hud-val">{hudData.originZ}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Velocity X</span><strong className="hud-val">{hudData.velocityX}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Velocity Y</span><strong className="hud-val">{hudData.velocityY}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Velocity Z</span><strong className="hud-val">{hudData.velocityZ}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Velocity XY</span><strong className="hud-val">{hudData.velocityXY}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">fuser2</span><strong className="hud-val">{hudData.fuser2}</strong></div>
-            </div>
-
-            {/* Column 3: Weapon & Movement */}
-            <div className="hud-col col-3">
-              <div className="hud-row"><span className="hud-lbl">Weapon</span><strong className="hud-val">{hudData.weapon}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Maxspeed</span><strong className="hud-val">{hudData.maxspeed}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Forwardmove</span><strong className="hud-val">{hudData.forwardmove}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Sidemove</span><strong className="hud-val">{hudData.sidemove}</strong></div>
-              <div className="hud-row"><span className="hud-lbl">Upmove</span><strong className="hud-val">{hudData.upmove}</strong></div>
-            </div>
-
-            {/* Column 4: Flags & Buttons */}
-            <div className="hud-col col-4">
-              <div className="hud-stacked">
-                <span className="hud-lbl">Flags</span>
-                <div className="hud-val-list">
-                  {hudData.flags.map((flag) => (
-                    <div key={flag} className="hud-val">{flag}</div>
-                  ))}
-                </div>
-              </div>
-              <div className="hud-stacked" style={{ marginTop: 25 }}>
-                <span className="hud-lbl">Buttons</span>
-                <div className="hud-val-list">
-                  {hudData.buttons.map((btn) => (
-                    <div key={btn} className="hud-val">{btn}</div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Column 5: Commands */}
-            <div className="hud-col col-5">
-              <div className="hud-stacked">
-                <span className="hud-lbl">Commands</span>
-                <div className="hud-val-list">
-                  {hudData.commands.map((cmd, idx) => (
-                    <div key={idx} className="hud-val">{cmd}</div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Switcher Bar: 30px height, from y=130 to 160 */}
-          <div className="line-tabs">
-            {(Object.keys(lineConfig) as LineKey[]).map((key) => (
-              <button
-                key={key}
-                type="button"
-                className={key === lineKey ? "active tab-item" : "tab-item"}
-                onClick={() => setLineKey(key)}
+      <div className="graph-viewer-root">
+        {dataset && hudData && (
+          <div className="graph-shell">
+            {/* Top HUD Panel: 5 exact columns matching Unique-KZ */}
+            <section className="top-panel">
+              <div
+                className="toggle-fullscreen"
+                onClick={() => {
+                  if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen?.().catch(() => {});
+                  } else {
+                    document.exitFullscreen?.().catch(() => {});
+                  }
+                }}
               >
-                {lineConfig[key].label}
-              </button>
-            ))}
-          </div>
+                Toggle<br />fullscreen
+              </div>
 
-          {/* Main Visualizer Area */}
-          <div className="graph-container-wrap">
-            {/* Left Axis Gutter (80px wide) */}
-            <div className="left-axis-gutter">
-              <svg width={80} height={graphHeight} className="left-gutter-svg">
-                {/* Plot scale ticks (Unique-KZ anchor (1, 1): bottom aligned directly on top of line) */}
-                {scale.ticks.map((tick) => (
-                  <text
-                    key={`tick-${tick.label}`}
-                    x={75}
-                    y={plotTop + tick.y - 2}
-                    textAnchor="end"
-                    className="axis-label"
-                    fill={tick.color}
-                  >
-                    {tick.label}
-                  </text>
-                ))}
+              {/* Column 1: Frame info */}
+              <div className="hud-col col-1">
+                <div className="hud-row"><span className="hud-lbl">Frame</span><strong className="hud-val">{hudData.frame}</strong></div>
+                <div className="hud-row"><span className="hud-lbl time-lbl">Server Time</span><strong className="hud-val">{hudData.serverTime}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Real fps</span><strong className="hud-val">{hudData.realFps}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Engine fps</span><strong className="hud-val">{hudData.engineFps}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Frame length</span><strong className="hud-val">{hudData.frameLength}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">MSec</span><strong className="hud-val">{hudData.msec}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Movetype</span><strong className="hud-val">{hudData.movetype}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Health</span><strong className="hud-val">{hudData.health}</strong></div>
+              </div>
 
-                {/* 12 Lane labels */}
-                {lanePositions.map((lane) => (
-                  <text
-                    key={`lane-lbl-${lane.key}`}
-                    x={75}
-                    y={lane.top + lane.height}
-                    textAnchor="end"
-                    className="lane-label-text"
-                  >
-                    {lane.label}
-                  </text>
-                ))}
+              {/* Column 2: Origin & Velocity */}
+              <div className="hud-col col-2">
+                <div className="hud-row"><span className="hud-lbl">Origin X</span><strong className="hud-val">{hudData.originX}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Origin Y</span><strong className="hud-val">{hudData.originY}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Origin Z</span><strong className="hud-val">{hudData.originZ}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Velocity X</span><strong className="hud-val">{hudData.velocityX}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Velocity Y</span><strong className="hud-val">{hudData.velocityY}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Velocity Z</span><strong className="hud-val">{hudData.velocityZ}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Velocity XY</span><strong className="hud-val">{hudData.velocityXY}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">fuser2</span><strong className="hud-val">{hudData.fuser2}</strong></div>
+              </div>
 
-                {/* 1px Vertical divider at x = 79 */}
-                <line x1={79} y1={0} x2={79} y2={graphHeight} stroke="#7f7f7f" strokeWidth={1} />
-              </svg>
+              {/* Column 3: Weapon & Movement */}
+              <div className="hud-col col-3">
+                <div className="hud-row"><span className="hud-lbl">Weapon</span><strong className="hud-val">{hudData.weapon}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Maxspeed</span><strong className="hud-val">{hudData.maxspeed}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Forwardmove</span><strong className="hud-val">{hudData.forwardmove}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Sidemove</span><strong className="hud-val">{hudData.sidemove}</strong></div>
+                <div className="hud-row"><span className="hud-lbl">Upmove</span><strong className="hud-val">{hudData.upmove}</strong></div>
+              </div>
+
+              {/* Column 4: Flags & Buttons */}
+              <div className="hud-col col-4">
+                <div className="hud-stacked">
+                  <span className="hud-lbl">Flags</span>
+                  <div className="hud-val-list">
+                    {hudData.flags.map((flag) => (
+                      <div key={flag} className="hud-val">{flag}</div>
+                    ))}
+                  </div>
+                </div>
+                <div className="hud-stacked" style={{ marginTop: 25 }}>
+                  <span className="hud-lbl">Buttons</span>
+                  <div className="hud-val-list">
+                    {hudData.buttons.map((btn) => (
+                      <div key={btn} className="hud-val">{btn}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Column 5: Commands */}
+              <div className="hud-col col-5">
+                <div className="hud-stacked">
+                  <span className="hud-lbl">Commands</span>
+                  <div className="hud-val-list">
+                    {hudData.commands.map((cmd, idx) => (
+                      <div key={idx} className="hud-val">{cmd}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Line tabs switcher: 30px */}
+            <div className="line-tabs">
+              {(Object.keys(lineConfig) as LineKey[]).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`tab-item ${lineKey === key ? "active" : ""}`}
+                  onClick={() => setLineKey(key)}
+                >
+                  {lineConfig[key].label}
+                </button>
+              ))}
             </div>
 
-            {/* Scrollable Viewport: 1 frame = 1 pixel */}
-            <div
-              className="graph-viewport"
-              ref={scrollContainerRef}
-              onMouseMove={handleViewportPointer}
-              onClick={handleViewportPointer}
-              onScroll={handleViewportScroll}
-              onWheel={handleWheel}
-            >
-              <svg
-                width={graphWidth}
-                height={graphHeight}
-                className="main-graph"
-                role="img"
-                aria-label="Graph plot"
-              >
-                {/* Grid lines for plot ticks */}
-                {scale.ticks.map((tick) => (
+            {/* Main Visualizer Area */}
+            <div className="graph-container-wrap">
+              {/* Left Axis Gutter (80px wide) */}
+              <div className="left-axis-gutter">
+                <svg width={80} height={graphHeight} className="left-gutter-svg">
+                  {/* Plot scale ticks */}
+                  {scale.ticks.map((tick) => (
+                    <text
+                      key={`tick-${tick.label}`}
+                      x={75}
+                      y={plotTop + tick.y - 2}
+                      textAnchor="end"
+                      className="axis-label"
+                      fill={tick.color}
+                    >
+                      {tick.label}
+                    </text>
+                  ))}
+
+                  {/* 12 Lane labels */}
+                  {lanePositions.map((lane) => (
+                    <text
+                      key={`lane-lbl-${lane.key}`}
+                      x={75}
+                      y={lane.top + lane.height}
+                      textAnchor="end"
+                      className="lane-label-text"
+                      fill="#888888"
+                    >
+                      {lane.label}
+                    </text>
+                  ))}
+
+                  {/* 1px Vertical divider at x = 79 */}
                   <line
-                    key={`gl-${tick.label}`}
-                    x1={0}
-                    y1={plotTop + tick.y}
-                    x2={graphWidth}
-                    y2={plotTop + tick.y}
-                    stroke="#444444"
+                    x1={79}
+                    y1={0}
+                    x2={79}
+                    y2={graphHeight}
+                    stroke="#7f7f7f"
                     strokeWidth={1}
                   />
-                ))}
+                </svg>
+              </div>
 
-                {/* MouseX waveform */}
-                {lineKey === "mouseX" &&
-                  mouseXSegments.map((d, idx) => (
-                    <path key={idx} d={d} fill="none" stroke="#ffffff" strokeWidth={1} />
+              {/* Scrollable Viewport: 1 frame = 1 pixel */}
+              <div
+                className="graph-viewport"
+                ref={scrollContainerRef}
+                onMouseMove={handleViewportPointer}
+                onClick={handleViewportPointer}
+                onScroll={handleViewportScroll}
+                onWheel={handleWheel}
+              >
+                <svg
+                  width={graphWidth}
+                  height={graphHeight}
+                  className="main-graph"
+                  role="img"
+                  aria-label="Graph plot"
+                >
+                  {/* Background grid lines */}
+                  {scale.ticks.map((tick) => (
+                    <line
+                      key={`grid-${tick.label}`}
+                      x1={0}
+                      y1={plotTop + tick.y}
+                      x2={graphWidth}
+                      y2={plotTop + tick.y}
+                      stroke="#1a1a1a"
+                      strokeWidth={1}
+                    />
                   ))}
 
-                {/* EngineFps points */}
-                {lineKey === "engineFps" &&
-                  engineFpsPoints.map((pt, idx) => (
-                    <rect key={idx} x={pt.x} y={pt.y} width={1} height={1} fill={pt.color} shapeRendering="crispEdges" />
-                  ))}
-
-                {/* RealFps points (pure red #ff0000) */}
-                {lineKey === "realFps" &&
-                  realFpsPoints.map((pt, idx) => (
-                    <rect key={idx} x={pt.x} y={pt.y} width={1} height={1} fill={pt.color} shapeRendering="crispEdges" />
-                  ))}
-
-                {/* MouseX Speed points (#aaaaaa) */}
-                {lineKey === "mouseXSpeed" &&
-                  mouseXSpeedPoints.map((pt, idx) => (
-                    <rect key={idx} x={pt.x} y={pt.y} width={1} height={1} fill="#aaaaaa" shapeRendering="crispEdges" />
-                  ))}
-
-                {/* Jump Height curves: Demo (#aaaaaa) and Calc (#00ffff) */}
-                {lineKey === "jumpHeight" && (
-                  <>
-                    {jumpHeightPoints.demo.map((pt, idx) => (
-                      <rect key={`jhd-${idx}`} x={pt.x} y={pt.y} width={1} height={1} fill="#aaaaaa" shapeRendering="crispEdges" />
-                    ))}
-                    {jumpHeightPoints.calc.map((pt, idx) => (
-                      <rect key={`jhc-${idx}`} x={pt.x} y={pt.y} width={1} height={1} fill="#00ffff" shapeRendering="crispEdges" />
-                    ))}
-                  </>
-                )}
-
-                {/* 12 Lanes */}
-                {lanePositions.map((lane) => {
-                  const top = lane.top;
-                  const h = lane.height;
-
-                  return (
-                    <g key={lane.key}>
-                      {/* Divider line below lane */}
-                      <line
-                        x1={0}
-                        y1={top + h + 2}
-                        x2={graphWidth}
-                        y2={top + h + 2}
-                        stroke="#444444"
+                  {/* MouseX waveform */}
+                  {lineKey === "mouseX" &&
+                    mouseXSegments.map((d, idx) => (
+                      <path
+                        key={idx}
+                        d={d}
+                        fill="none"
+                        stroke="#ffffff"
                         strokeWidth={1}
                       />
+                    ))}
 
-                      {/* Lane-specific contents */}
-                      {lane.key === "techniques" &&
-                        techniques.map((jump, jidx) => {
-                          const w = jump.endFrame - jump.startFrame + 1;
-                          const isBhop = jump.label === "sbj" || jump.label === "bj";
-                          const markerColor = jump.isIdealBhop ? "#008800" : "#880000";
+                  {/* EngineFps points */}
+                  {lineKey === "engineFps" &&
+                    engineFpsPoints.map((pt, idx) => (
+                      <rect
+                        key={idx}
+                        x={pt.x}
+                        y={pt.y}
+                        width={1}
+                        height={1}
+                        fill={pt.color}
+                        shapeRendering="crispEdges"
+                      />
+                    ))}
 
-                          return (
-                            <g key={`tech-${jidx}`} onClick={() => handleJumpClick(jump)} style={{ cursor: "pointer" }}>
-                              {/* Jump rect */}
-                              <rect x={jump.startFrame} y={top} width={w} height={h} fill={jump.color} />
+                  {/* RealFps points */}
+                  {lineKey === "realFps" &&
+                    realFpsPoints.map((pt, idx) => (
+                      <rect
+                        key={idx}
+                        x={pt.x}
+                        y={pt.y}
+                        width={1}
+                        height={1}
+                        fill={pt.color}
+                        shapeRendering="crispEdges"
+                      />
+                    ))}
 
-                              {/* Bhop marker circle centered directly on startFrame */}
-                              {isBhop && (
-                                <>
-                                  <circle cx={jump.startFrame} cy={top + 7.5} r={5.5} fill="#444444" />
-                                  <circle cx={jump.startFrame} cy={top + 7.5} r={4.5} fill={markerColor} />
-                                </>
-                              )}
+                  {/* MouseX Speed points */}
+                  {lineKey === "mouseXSpeed" &&
+                    mouseXSpeedPoints.map((pt, idx) => (
+                      <rect
+                        key={idx}
+                        x={pt.x}
+                        y={pt.y}
+                        width={1}
+                        height={1}
+                        fill="#aaaaaa"
+                        shapeRendering="crispEdges"
+                      />
+                    ))}
 
-                              {/* Centered label */}
-                              <text
-                                x={jump.startFrame + w / 2}
-                                y={top + 11.5}
-                                textAnchor="middle"
-                                fill="#ffffff"
-                                fontSize="10px"
-                                fontWeight="bold"
-                                fontFamily="Roboto, sans-serif"
+                  {/* Jump Height curves */}
+                  {lineKey === "jumpHeight" && (
+                    <>
+                      {jumpHeightPoints.demo.map((pt, idx) => (
+                        <rect
+                          key={`jhd-${idx}`}
+                          x={pt.x}
+                          y={pt.y}
+                          width={1}
+                          height={1}
+                          fill="#aaaaaa"
+                          shapeRendering="crispEdges"
+                        />
+                      ))}
+                      {jumpHeightPoints.calc.map((pt, idx) => (
+                        <rect
+                          key={`jhc-${idx}`}
+                          x={pt.x}
+                          y={pt.y}
+                          width={1}
+                          height={1}
+                          fill="#00ffff"
+                          shapeRendering="crispEdges"
+                        />
+                      ))}
+                    </>
+                  )}
+
+                  {/* 12 Lanes */}
+                  {lanePositions.map((lane) => {
+                    const top = lane.top;
+                    const h = lane.height;
+
+                    return (
+                      <g key={lane.key}>
+                        {/* Divider line below lane */}
+                        <line
+                          x1={0}
+                          y1={top + h + 2}
+                          x2={graphWidth}
+                          y2={top + h + 2}
+                          stroke="#222222"
+                          strokeWidth={1}
+                        />
+
+                        {/* Lane-specific contents */}
+                        {lane.key === "techniques" &&
+                          techniques.map((jump, jidx) => {
+                            const w = jump.endFrame - jump.startFrame + 1;
+                            const isBhop = jump.label === "sbj" || jump.label === "bj";
+                            const markerColor = jump.isIdealBhop ? "#008800" : "#880000";
+
+                            return (
+                              <g
+                                key={`tech-${jidx}`}
+                                onClick={() => handleJumpClick(jump)}
+                                style={{ cursor: "pointer" }}
                               >
-                                {jump.label}
-                              </text>
-                            </g>
-                          );
-                        })}
+                                <rect x={jump.startFrame} y={top} width={w} height={h} fill={jump.color} />
+                                {isBhop && (
+                                  <>
+                                    <circle cx={jump.startFrame} cy={top + 7.5} r={5.5} fill="#444444" />
+                                    <circle cx={jump.startFrame} cy={top + 7.5} r={4.5} fill={markerColor} />
+                                  </>
+                                )}
+                                <text
+                                  x={jump.startFrame + w / 2}
+                                  y={top + 11.5}
+                                  textAnchor="middle"
+                                  fill="#ffffff"
+                                  fontSize="10px"
+                                  fontWeight="bold"
+                                  fontFamily="var(--font-sans)"
+                                >
+                                  {jump.label}
+                                </text>
+                              </g>
+                            );
+                          })}
 
-                      {lane.key === "jump" && (
-                        <>
-                          {/* Jump spacebar hold bars */}
-                          {jumpHoldSegments.map((seg, sidx) => (
-                            <rect
-                              key={`jmph-${sidx}`}
-                              x={seg.start}
-                              y={top}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={h}
-                              fill="#555555"
-                            />
-                          ))}
-
-                          {/* Jump command scroll notches: exact 1px lines matching Unique-KZ */}
-                          {jumpCommandLines.map((cmd, cidx) => (
-                            <rect
-                              key={`jmpc-${cidx}`}
-                              x={cmd.frame}
-                              y={top + cmd.yOffset}
-                              width={1}
-                              height={cmd.h}
-                              fill={cmd.color}
-                              shapeRendering="crispEdges"
-                            />
-                          ))}
-                        </>
-                      )}
-
-                      {lane.key === "ground" &&
-                        groundSegments.map((seg, sidx) => (
-                          <rect
-                            key={`grd-${sidx}`}
-                            x={seg.start}
-                            y={top}
-                            width={Math.max(1, seg.end - seg.start + 1)}
-                            height={h}
-                            fill="#555555"
-                          />
-                        ))}
-
-                      {lane.key === "duck" && (
-                        <>
-                          {duckSegments.map((seg, sidx) => (
-                            <g key={`dck-${sidx}`}>
+                        {lane.key === "jump" && (
+                          <>
+                            {jumpHoldSegments.map((seg, sidx) => (
                               <rect
+                                key={`jmph-${sidx}`}
                                 x={seg.start}
                                 y={top}
                                 width={Math.max(1, seg.end - seg.start + 1)}
                                 height={h}
                                 fill="#555555"
                               />
-                              {/* Red line at +duck */}
-                              <line x1={seg.start} y1={top} x2={seg.start} y2={top + h} stroke="#ff0000" strokeWidth={1} />
-                              {/* Blue line at -duck */}
-                              <line x1={seg.end + 1} y1={top} x2={seg.end + 1} y2={top + h} stroke="#0000ff" strokeWidth={1} />
-                            </g>
-                          ))}
-                        </>
-                      )}
+                            ))}
+                            {jumpCommandLines.map((cmd, cidx) => (
+                              <rect
+                                key={`jmpc-${cidx}`}
+                                x={cmd.frame}
+                                y={top + cmd.yOffset}
+                                width={1}
+                                height={cmd.h}
+                                fill={cmd.color}
+                                shapeRendering="crispEdges"
+                              />
+                            ))}
+                          </>
+                        )}
 
-                      {lane.key === "duckstate" && (
-                        <>
-                          {duckstate1Segments.map((seg, sidx) => (
+                        {lane.key === "ground" &&
+                          groundSegments.map((seg, sidx) => (
                             <rect
-                              key={`ds1-${sidx}`}
-                              x={seg.start}
-                              y={top}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={h}
-                              fill="#ffa000"
-                            />
-                          ))}
-                          {duckstate2Segments.map((seg, sidx) => (
-                            <rect
-                              key={`ds2-${sidx}`}
-                              x={seg.start}
-                              y={top}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={h}
-                              fill="#00ff88"
-                            />
-                          ))}
-                        </>
-                      )}
-
-                      {lane.key === "forward" && (
-                        <>
-                          {forwardBase.map((seg, sidx) => (
-                            <rect
-                              key={`fwd-${sidx}`}
+                              key={`grd-${sidx}`}
                               x={seg.start}
                               y={top}
                               width={Math.max(1, seg.end - seg.start + 1)}
@@ -1303,201 +1325,249 @@ export function App() {
                               fill="#555555"
                             />
                           ))}
-                          {turnUpSegments.map((seg, sidx) => (
-                            <rect
-                              key={`tu-${sidx}`}
-                              x={seg.start}
-                              y={top + 7.5}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={7.5}
-                              fill="#888888"
-                            />
-                          ))}
-                        </>
-                      )}
 
-                      {lane.key === "back" && (
-                        <>
-                          {backBase.map((seg, sidx) => (
-                            <rect
-                              key={`bk-${sidx}`}
-                              x={seg.start}
-                              y={top}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={h}
-                              fill="#555555"
-                            />
-                          ))}
-                          {turnDownSegments.map((seg, sidx) => (
-                            <rect
-                              key={`td-${sidx}`}
-                              x={seg.start}
-                              y={top + 7.5}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={7.5}
-                              fill="#888888"
-                            />
-                          ))}
-                        </>
-                      )}
+                        {lane.key === "duck" && (
+                          <>
+                            {duckSegments.map((seg, sidx) => (
+                              <g key={`dck-${sidx}`}>
+                                <rect
+                                  x={seg.start}
+                                  y={top}
+                                  width={Math.max(1, seg.end - seg.start + 1)}
+                                  height={h}
+                                  fill="#555555"
+                                />
+                                <line x1={seg.start} y1={top} x2={seg.start} y2={top + h} stroke="#ff0000" strokeWidth={1} />
+                                <line x1={seg.end + 1} y1={top} x2={seg.end + 1} y2={top + h} stroke="#0000ff" strokeWidth={1} />
+                              </g>
+                            ))}
+                          </>
+                        )}
 
-                      {lane.key === "moveleft" && (
-                        <>
-                          {moveleftBase.map((seg, sidx) => (
-                            <rect
-                              key={`ml-${sidx}`}
-                              x={seg.start}
-                              y={top}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={h}
-                              fill="#555555"
-                            />
-                          ))}
-                          {turnLeftSegments.map((seg, sidx) => (
-                            <rect
-                              key={`tl-${sidx}`}
-                              x={seg.start}
-                              y={top + 7.5}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={7.5}
-                              fill="#888888"
-                            />
-                          ))}
-                        </>
-                      )}
+                        {lane.key === "duckstate" && (
+                          <>
+                            {duckstate1Segments.map((seg, sidx) => (
+                              <rect
+                                key={`ds1-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#ffa000"
+                              />
+                            ))}
+                            {duckstate2Segments.map((seg, sidx) => (
+                              <rect
+                                key={`ds2-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#00ff88"
+                              />
+                            ))}
+                          </>
+                        )}
 
-                      {lane.key === "moveright" && (
-                        <>
-                          {moverightBase.map((seg, sidx) => (
-                            <rect
-                              key={`mr-${sidx}`}
-                              x={seg.start}
-                              y={top}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={h}
-                              fill="#555555"
-                            />
-                          ))}
-                          {turnRightSegments.map((seg, sidx) => (
-                            <rect
-                              key={`tr-${sidx}`}
-                              x={seg.start}
-                              y={top}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={7.5}
-                              fill="#888888"
-                            />
-                          ))}
-                        </>
-                      )}
-                    </g>
-                  );
-                })}
+                        {lane.key === "forward" && (
+                          <>
+                            {forwardBase.map((seg, sidx) => (
+                              <rect
+                                key={`fwd-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#555555"
+                              />
+                            ))}
+                          </>
+                        )}
 
-                {/* Vertical Cursor Line: cyan #00ffff */}
-                <line x1={cursorX} y1={0} x2={cursorX} y2={graphHeight} stroke="#00ffff" strokeWidth={1} />
+                        {lane.key === "back" && (
+                          <>
+                            {backBase.map((seg, sidx) => (
+                              <rect
+                                key={`bck-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#555555"
+                              />
+                            ))}
+                          </>
+                        )}
 
-                {/* Vertical Start & Stop Lines: red #ff0000 at timer.start_frame / timer.stop_frame */}
-                {dataset.meta.startFrame !== undefined && (
+                        {lane.key === "moveleft" && (
+                          <>
+                            {moveleftBase.map((seg, sidx) => (
+                              <rect
+                                key={`ml-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#555555"
+                              />
+                            ))}
+                          </>
+                        )}
+
+                        {lane.key === "moveright" && (
+                          <>
+                            {moverightBase.map((seg, sidx) => (
+                              <rect
+                                key={`mr-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#555555"
+                              />
+                            ))}
+                          </>
+                        )}
+                      </g>
+                    );
+                  })}
+
+                  {/* Vertical Cursor Line */}
                   <line
-                    x1={dataset.meta.startFrame}
+                    x1={cursorX}
                     y1={0}
-                    x2={dataset.meta.startFrame}
+                    x2={cursorX}
                     y2={graphHeight}
-                    stroke="#ff0000"
+                    stroke="#00ffff"
                     strokeWidth={1}
                   />
-                )}
-                {dataset.meta.stopFrame !== undefined && (
-                  <line
-                    x1={dataset.meta.stopFrame}
-                    y1={0}
-                    x2={dataset.meta.stopFrame}
-                    y2={graphHeight}
-                    stroke="#ff0000"
-                    strokeWidth={1}
-                  />
-                )}
-              </svg>
 
-              {/* MouseX & MouseX Speed Tooltip (1:1 with Unique-KZ createStatsContainer) */}
-              {(lineKey === "mouseX" || lineKey === "mouseXSpeed") && (
-                <div
-                  className="mouse-tooltip"
-                  style={{
-                    left: cursorX + 8,
-                    top: lineKey === "mouseX"
-                      ? Math.min(160, Math.max(15, plotTop + (1 - clamp(dataset.dense.mouseX[frameIndex] ?? 0, 0, 360) / 360) * 180 - 15))
-                      : Math.min(160, Math.max(15, plotTop + (11.25 - (dataset.dense.mouseXSpeed[frameIndex] ?? 0)) * 8 - 15))
-                  }}
-                >
-                  <div className="mouse-tooltip-row"><span>Angle:</span><strong>{formatNum(dataset.dense.mouseX[frameIndex] ?? 0, 3)}</strong></div>
-                  <div className="mouse-tooltip-row"><span>YawSpeed:</span><strong>{formatNum(dataset.dense.mouseXSpeed[frameIndex] ?? 0, 3)}</strong></div>
-                </div>
-              )}
+                  {/* Vertical Start & Stop Lines: red #ff0000 */}
+                  {dataset.meta.startFrame !== undefined && (
+                    <line
+                      x1={dataset.meta.startFrame}
+                      y1={0}
+                      x2={dataset.meta.startFrame}
+                      y2={graphHeight}
+                      stroke="#ff0000"
+                      strokeWidth={1}
+                    />
+                  )}
+                  {dataset.meta.stopFrame !== undefined && (
+                    <line
+                      x1={dataset.meta.stopFrame}
+                      y1={0}
+                      x2={dataset.meta.stopFrame}
+                      y2={graphHeight}
+                      stroke="#ff0000"
+                      strokeWidth={1}
+                    />
+                  )}
+                </svg>
 
-              {/* Jump Stats Popup (Authentic Unique-KZ) */}
-              {activeJump && (
-                <aside
-                  className="jump-popup"
-                  style={{
-                    left: clamp(
-                      (activeJump.startFrame + activeJump.endFrame) / 2 - 105,
-                      scrollContainerRef.current ? scrollContainerRef.current.scrollLeft + 10 : 10,
-                      scrollContainerRef.current ? scrollContainerRef.current.scrollLeft + scrollContainerRef.current.clientWidth - 225 : 1000
-                    ),
-                    top: Math.max(10, lanesTop + 60 - 240)
-                  }}
-                >
-                  <h3>{jumpTitle(activeJump)}</h3>
-                  <p><span>Frame:</span><strong>{activeJump.endFrame}</strong></p>
-                  <p><span>Distance:</span><strong>{formatNum(activeJump.distance, 3)}</strong></p>
-                  {activeJump.distanceXy !== undefined && (
-                    <p><span>Distance X/Y:</span><strong>{formatNum(activeJump.distanceXy, 3)}</strong></p>
-                  )}
-                  <p><span>MaxSpeed:</span><strong>{formatNum(activeJump.maxspeed, 3)}</strong></p>
-                  <p>
-                    <span>Prestrafe:</span>
-                    <strong>
-                      {activeJump.preJumpVelocityJumpoff !== undefined && activeJump.preJumpVelocityJumpoff !== activeJump.prestrafe
-                        ? `${formatNum(activeJump.prestrafe, 3)} (${formatNum(activeJump.preJumpVelocityJumpoff, 3)})`
-                        : formatNum(activeJump.prestrafe, 3)}
-                    </strong>
-                  </p>
-                  {activeJump.preJumpVelocityBeforeJumpoff !== undefined && (
-                    <p><span>OldSpeed:</span><strong>{formatNum(activeJump.preJumpVelocityBeforeJumpoff, 3)}</strong></p>
-                  )}
-                  <p><span>Strafes:</span><strong>{activeJump.strafes}</strong></p>
-                  <p><span>Sync:</span><strong>{formatNum(activeJump.sync, 0)}%</strong></p>
-                  <p><span>Frames (duck/air):</span><strong>{activeJump.framesInDuck ?? 0}/{activeJump.frames ?? 0}</strong></p>
-                  {activeJump.block !== undefined && (
-                    <p><span>Block:</span><strong>{activeJump.block}</strong></p>
-                  )}
-                  <p><span>Jump off:</span><strong>{activeJump.jumpoff !== undefined ? formatNum(activeJump.jumpoff, 3) : activeJump.startFrame}</strong></p>
-                  <p><span>Landing:</span><strong>{activeJump.landing !== undefined ? formatNum(activeJump.landing, 3) : activeJump.endFrame}</strong></p>
-                  <div className="copy-hint">{copiedHint ? "Copied!" : "Click on a bar to copy"}</div>
-                </aside>
-              )}
+                {/* Floating mouseX Angle Tooltip */}
+                {lineKey === "mouseX" && (
+                  <aside
+                    className="mouse-tooltip"
+                    style={{
+                      left: clamp(cursorX + 8, 8, graphWidth - 140),
+                      top: clamp(
+                        plotTop + (1 - clamp(series[frameIndex] ?? 0, 0, 360) / 360) * 180 - 15,
+                        plotTop,
+                        plotTop + 130
+                      )
+                    }}
+                  >
+                    <div className="mouse-tooltip-row">
+                      <span>Angle:</span>
+                      <strong>{formatNum(series[frameIndex] ?? 0, 3)}</strong>
+                    </div>
+                    <div className="mouse-tooltip-row">
+                      <span>YawSpeed:</span>
+                      <strong>{formatNum(dataset.dense.mouseXSpeed[frameIndex] ?? 0, 3)}</strong>
+                    </div>
+                  </aside>
+                )}
+
+                {/* Floating mouseX Speed Tooltip */}
+                {lineKey === "mouseXSpeed" && (
+                  <aside
+                    className="mouse-tooltip"
+                    style={{
+                      left: clamp(cursorX + 8, 8, graphWidth - 140),
+                      top: clamp(
+                        plotTop + (11.25 - (dataset.dense.mouseXSpeed[frameIndex] ?? 0)) * 8 - 15,
+                        plotTop,
+                        plotTop + 130
+                      )
+                    }}
+                  >
+                    <div className="mouse-tooltip-row">
+                      <span>YawSpeed:</span>
+                      <strong>{formatNum(dataset.dense.mouseXSpeed[frameIndex] ?? 0, 3)}</strong>
+                    </div>
+                  </aside>
+                )}
+
+                {/* Jump Info Popup */}
+                {activeJump && (
+                  <aside
+                    className="jump-popup"
+                    style={{
+                      left: clamp(cursorX - 105, 10, graphWidth - 230),
+                      top: Math.max(10, lanesTop - 220)
+                    }}
+                  >
+                    <h3>{jumpTitle(activeJump)}</h3>
+                    <p><span>Frame:</span><strong>{activeJump.endFrame}</strong></p>
+                    <p><span>Distance:</span><strong>{formatNum(activeJump.distance, 3)}</strong></p>
+                    {activeJump.distanceXy !== undefined && (
+                      <p><span>Distance X/Y:</span><strong>{formatNum(activeJump.distanceXy, 3)}</strong></p>
+                    )}
+                    <p><span>MaxSpeed:</span><strong>{formatNum(activeJump.maxspeed, 3)}</strong></p>
+                    <p>
+                      <span>Prestrafe:</span>
+                      <strong>
+                        {activeJump.preJumpVelocityJumpoff !== undefined && activeJump.preJumpVelocityJumpoff !== activeJump.prestrafe
+                          ? `${formatNum(activeJump.prestrafe, 3)} (${formatNum(activeJump.preJumpVelocityJumpoff, 3)})`
+                          : formatNum(activeJump.prestrafe, 3)}
+                      </strong>
+                    </p>
+                    {activeJump.preJumpVelocityBeforeJumpoff !== undefined && (
+                      <p><span>OldSpeed:</span><strong>{formatNum(activeJump.preJumpVelocityBeforeJumpoff, 3)}</strong></p>
+                    )}
+                    <p><span>Strafes:</span><strong>{activeJump.strafes}</strong></p>
+                    <p><span>Sync:</span><strong>{formatNum(activeJump.sync, 0)}%</strong></p>
+                    <p><span>Frames (duck/air):</span><strong>{activeJump.framesInDuck ?? 0}/{activeJump.frames ?? 0}</strong></p>
+                    {activeJump.block !== undefined && (
+                      <p><span>Block:</span><strong>{activeJump.block}</strong></p>
+                    )}
+                    <p><span>Jump off:</span><strong>{activeJump.jumpoff !== undefined ? formatNum(activeJump.jumpoff, 3) : activeJump.startFrame}</strong></p>
+                    <p><span>Landing:</span><strong>{activeJump.landing !== undefined ? formatNum(activeJump.landing, 3) : activeJump.endFrame}</strong></p>
+                    <div className="copy-hint">{copiedHint ? "Copied!" : "Click on a bar to copy"}</div>
+                  </aside>
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Scrollbar */}
+            <div
+              ref={scrollbarTrackRef}
+              className="bottom-scrollbar"
+              onClick={handleScrollbarClick}
+            >
+              <div
+                className="scrollbar-thumb"
+                style={{ left: thumbLeft }}
+                onMouseDown={handleThumbMouseDown}
+              />
             </div>
           </div>
+        )}
 
-          {/* Authentic Unique-KZ Bottom Scrollbar */}
-          <div
-            ref={scrollbarTrackRef}
-            className="bottom-scrollbar"
-            onClick={handleScrollbarClick}
-          >
-            <div
-              className="scrollbar-thumb"
-              style={{ left: thumbLeft }}
-              onMouseDown={handleThumbMouseDown}
-            />
-          </div>
-        </div>
-      )}
-
-      {busy && <div className="viewer-status">Loading...</div>}
-      {errorText && <div className="viewer-status error">{errorText}</div>}
+        {busy && <div className="viewer-status">Loading demo telemetry...</div>}
+        {errorText && <div className="viewer-status error">{errorText}</div>}
+      </div>
     </div>
   );
 }
