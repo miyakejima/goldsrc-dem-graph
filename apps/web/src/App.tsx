@@ -1375,15 +1375,27 @@ export function App() {
                 {/* Vertical Cursor Line: cyan #00ffff */}
                 <line x1={cursorX} y1={0} x2={cursorX} y2={graphHeight} stroke="#00ffff" strokeWidth={1} />
 
-                {/* Vertical Start Line: red #ff0000 at timer.start_frame */}
-                <line
-                  x1={dataset.meta.startFrame ?? 21}
-                  y1={0}
-                  x2={dataset.meta.startFrame ?? 21}
-                  y2={graphHeight}
-                  stroke="#ff0000"
-                  strokeWidth={1}
-                />
+                {/* Vertical Start & Stop Lines: red #ff0000 at timer.start_frame / timer.stop_frame */}
+                {dataset.meta.startFrame !== undefined && (
+                  <line
+                    x1={dataset.meta.startFrame}
+                    y1={0}
+                    x2={dataset.meta.startFrame}
+                    y2={graphHeight}
+                    stroke="#ff0000"
+                    strokeWidth={1}
+                  />
+                )}
+                {dataset.meta.stopFrame !== undefined && (
+                  <line
+                    x1={dataset.meta.stopFrame}
+                    y1={0}
+                    x2={dataset.meta.stopFrame}
+                    y2={graphHeight}
+                    stroke="#ff0000"
+                    strokeWidth={1}
+                  />
+                )}
               </svg>
 
               {/* MouseX & MouseX Speed Tooltip (1:1 with Unique-KZ createStatsContainer) */}
