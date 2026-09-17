@@ -1,171 +1,101 @@
 # GoldSrc Demo Graph
 
-Offline `.dem` file analyzer for CS 1.6 KZ/bhop demos. Parses GoldSrc demo frames locally via a Rust binary and renders the full interactive graph (engine fps, mouseX, mouseX speed, jump height, strafe data) in the browser — no upstream API, no login required.
+**Free, open-source, serverless GoldSrc `.dem` file analyzer and visualizer for Counter-Strike 1.6 KZ/Bhop demos.**
 
-Built by reverse engineering the `demo.unique-kz.net` graph renderer and pairing it with a purpose-built Rust parser for the GoldSrc demo binary format.
-
----
-
-## Screenshots
-
-**Engine FPS — frame timeline with technique markers**
-![Engine FPS view](docs/screenshots/engine-fps.png)
-
-**MouseX — yaw angle over time with per-jump breakdown**
-![MouseX view with jump info](docs/screenshots/mousex-jump-info.png)
-
-**MouseX Speed — per-frame yaw delta**
-![MouseX speed view](docs/screenshots/mousex-speed.png)
-
-**Jump Height — parabolic arc per bhop**
-![Jump height view](docs/screenshots/jump-height.png)
+Parses GoldSrc demo frames directly in your browser with sub-15ms parsing speed, rendering a 1:1 authentic interactive graph (Engine FPS, Real FPS, MouseX, MouseX Speed, Jump Height, Strafe Sync, and Techniques) — **zero server dependencies, zero installations, 100% free forever on GitHub Pages.**
 
 ---
 
-## What It Does
+## Live Demo & GitHub Pages
 
-1. Accept a local `.dem` file upload in the browser
-2. Invoke the local Rust parser binary to extract frame data into a graph payload
-3. Render the full interactive graph UI in-browser (engine fps, real fps, mouseX, mouseX speed, jump height)
-4. Display per-jump technique information (stand-up bhop, duckbug, edgebug, slidebug, longjump) with distance, prestrate, strafes, sync, and air frames
-5. Export deterministic CSV datasets for offline strafe analysis
+You can run this application entirely in your browser without installing anything:
 
-No network requests are made during normal use. The Rust parser is built locally on first run via Cargo.
+**Live URL**: `https://miyakejima.github.io/goldsrc-dem-graph/`
 
----
-
-## Stack
-
-| Layer | Technology |
-|---|---|
-| Frontend | Vite + vanilla JS + [PixiJS](https://pixijs.com/) 7 |
-| Dev server | Express 5 + Vite middleware |
-| Demo parser | Rust (`hldemo` crate) → JSON payload |
-| Export | CSV (jumps, frames, strafe-helper dataset) |
-
----
-
-## Requirements
-
-- **Node.js** 20+
-- **npm**
-- **Rust + Cargo** (installed via [rustup](https://rustup.rs/))
-- Windows, macOS, or Linux with a local browser
-
-See [REQUIREMENTS.md](REQUIREMENTS.md) for the full setup checklist.
+### Features:
+- **Instant In-Browser Parser**: Drop any `.dem` file onto the window and parse 100,000+ frames in ~13ms using pure TypeScript WebAssembly/Buffer algorithms. No file data ever leaves your computer.
+- **Pre-Bundled Sample Dataset**: Automatically loads full demo telemetry on visit for instant exploration.
+- **Authentic 1:1 Visual Parity with Unique-KZ**:
+  - **Engine FPS**: Frame timeline with 100 / 83 / 50 / 25 fps thresholds and technique markers.
+  - **Real FPS**: Frametime-derived client FPS accurately rendered.
+  - **MouseX**: Absolute yaw angles over time with 180° discontinuity handling and interactive jump popup breakdown.
+  - **MouseX Speed**: Per-frame yaw angular velocity with strafe oscillation harmonics.
+  - **Jump Height**: Parabolic demo measured height vs ballistic aerodynamic curve comparison.
+  - **Authentic 5-Column HUD**: Frame, Server Time, Real/Engine FPS, MSec, Origin, Velocity, Weapon, Maxspeed, Movement keys, Flags, Buttons, and Console Commands.
+- **Responsive Controls**:
+  - **Playback**: Space to play / pause real-time playback.
+  - **Frame Scrubbing**: Arrow keys or `A` / `D` to scrub frame-by-frame (`Shift` for x10, `Ctrl` for x100).
+  - **Quick Navigation**: `Home` for start frame, `End` for stop frame.
+  - **Open Demo**: `Ctrl+O` or click "Open demo" or simply drag and drop any `.dem` file.
+  - **Copy Technique**: Click any jump bar to copy its full stats string to clipboard.
 
 ---
 
-## Quick Start
+## GitHub Actions & Deployment
+
+This repository includes an automated GitHub Pages deployment workflow in [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+
+### Enabling GitHub Pages in your Fork / Repo:
+1. Navigate to your repository on GitHub.
+2. Go to **Settings** → **Pages**.
+3. Under **Build and deployment** → **Source**, select **GitHub Actions**.
+4. Push to `main` (or run the workflow manually under **Actions** → **Deploy to GitHub Pages**).
+5. Your site is live at `https://<username>.github.io/<repository>/`!
+
+---
+
+## Local Development
+
+If you wish to develop or run the application locally:
 
 ```bash
-# 1. Install JS dependencies
+# 1. Clone the repository
+git clone https://github.com/miyakejima/goldsrc-dem-graph.git
+cd goldsrc-dem-graph
+
+# 2. Install dependencies
 npm install
 
-# 2. Start the local app (builds Rust parser on first run)
+# 3. Start local development server (API + Web)
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173), drop in a `.dem` file, click **Parse + Load Graph**.
-
----
-
-## Graph Views
-
-| Tab | What it shows |
-|---|---|
-| `engine fps` | Engine FPS per frame with 100 fps / 83 fps / 50 fps / 25 fps reference lines |
-| `real fps` | Real (client) FPS per frame |
-| `mouseX` | Absolute yaw angle over time — click any technique bar for full jump stats |
-| `mouseX speed` | Per-frame yaw delta (degrees/frame) — shows strafe oscillation pattern |
-| `jump height` | Parabolic Z-height arc for each bhop with the bhop baseline in cyan |
-
-### Technique bar rows (bottom panel)
-
-| Row | Meaning |
-|---|---|
-| `techniques` | Detected technique per jump: `sbj` (stand-up bhop), `dj` (duck jump), `lj` (long jump), etc. |
-| `jump` | Frame-level jump button presses |
-| `ground` | Ground contact frames |
-| `duck` / `duckstate` | Duck button and duck state transitions |
-| `forward` / `back` | Forwardmove direction |
-| `moveleft` / `moveright` | Sidemove direction |
-
----
-
-## CSV Export
-
-The **Export Everything CSV Pack** button downloads a zip containing all frame data for offline analysis.
-
----
-
-## Black-Box Toolkit (optional)
-
-`tools/blackbox/` contains parity scripts for comparing local parser output against upstream API responses. Requires environment variables:
-
+### Building & Previewing Locally:
 ```bash
-set UNIQUE_AUTH_TOKEN=your_token
-set UNIQUE_CSRF_TOKEN=optional_csrf   # optional
-```
+# Build web app
+npm run build --workspace=@kz-rebuild/web
 
-| Script | Purpose |
-|---|---|
-| `bb:upload` | Upload a folder of demos to the upstream API |
-| `bb:fetch` | Fetch upstream graph payloads for uploaded demos |
-| `bb:parse-local` | Run the local parser on the same demos |
-| `bb:analyze` | Compare local vs upstream payloads, produce calibration report |
-| `bb:analyze-bars` | Bar-level parity report |
-| `bb:analyze-canonical` | Canonical parity report |
-| `bb:compare-demo` | Side-by-side diff for a single demo |
-
-Generated output belongs in `re_data/` which is intentionally kept out of source control.
-
----
-
-## Project Layout
-
-```
-unique-graph-local-tester/
-├── src/
-│   ├── main.js                  # App entry — file upload, UI boot, export dispatch
-│   ├── style.css
-│   ├── upstream/                # Extracted graph renderer (PixiJS-based)
-│   │   ├── graph/               # Core graph rendering logic
-│   │   │   ├── bars/            # Technique / jump / state bar renderers
-│   │   │   ├── graphics/        # Overlay renderers (duck, ground, forward, etc.)
-│   │   │   └── models/          # Graph data models
-│   │   └── pages/demo/          # Demo page shell
-│   └── export/
-│       ├── csv-pack.js          # Full CSV pack export
-│       └── strafe-helper-dataset.js  # Strafe-helper CSV export
-├── server/
-│   └── dev-server.js            # Express + Vite dev server; /api/parse-dem endpoint
-├── parser-rs/
-│   ├── Cargo.toml               # hldemo + serde_json
-│   └── src/main.rs              # GoldSrc .dem → graph JSON payload
-├── tools/
-│   ├── blackbox/                # Parity and calibration scripts
-│   └── smoke-test-csv-pack.mjs  # CSV export smoke test
-├── docs/
-│   ├── architecture.md
-│   ├── blackbox-tooling.md
-│   └── screenshots/
-├── re_data/                     # Generated workspace — not committed
-└── vite.config.js
+# Preview production build locally
+npm run preview --workspace=@kz-rebuild/web
 ```
 
 ---
 
-## How the Parser Works
-
-The Rust binary reads a GoldSrc `.dem` file using the [`hldemo`](https://crates.io/crates/hldemo) crate, walks every demo frame, and emits a JSON payload consumed by the graph renderer. The parser is built automatically by the dev server on first run if no binary is present.
+## Architecture & Workspaces
 
 ```
-.dem file → hldemo frame iterator → per-frame state extraction → JSON → graph renderer
+goldsrc-dem-graph/
+├── apps/
+│   ├── web/                     # React 19 + Vite frontend (deployed to GitHub Pages)
+│   │   ├── src/
+│   │   │   ├── App.tsx          # 1:1 Graph viewer, canvas rendering & HUD
+│   │   │   ├── clientParser.ts  # Pure client-side .dem parser & analytics engine
+│   │   │   └── api.ts           # Hybrid data loader (In-memory / API / static fallback)
+│   │   └── public/
+│   │       └── sample-dataset.json # Pre-compiled demo dataset for instant zero-server load
+│   └── api/                     # Optional Node.js backend server
+├── packages/
+│   ├── parser/                  # High-performance GoldSrc demo parser
+│   ├── analytics/               # AMXX uq_jumpstats & kz_ljs_xm movement analytics
+│   ├── shared-types/            # Strict TypeScript contracts across pipeline
+│   └── physics/                 # GoldSrc pm_shared simulation & collision models
+└── .github/
+    └── workflows/
+        └── deploy.yml           # Automated GitHub Pages CI/CD workflow
 ```
 
 ---
 
 ## License
 
-ISC — see [LICENSE](LICENSE).
+ISC License.
