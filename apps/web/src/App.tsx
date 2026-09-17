@@ -339,7 +339,7 @@ export function App() {
       const saved = localStorage.getItem("kz_theme");
       if (saved === "dark" || saved === "light") return saved;
     }
-    return "light"; // Default to clean white theme
+    return "dark"; // Default to true AMOLED dark theme
   });
 
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
