@@ -92,22 +92,19 @@ export function DemoLibrary({
         onClick={(e) => e.stopPropagation()}
         aria-label="Demo Telemetry Vault"
       >
-        {/* Vault Header */}
+        {/* Drawer Header */}
         <div className="vault-header">
           <div className="vault-title-block">
-            <div className="vault-title-row">
-              <span className="vault-terminal-tag">//</span>
-              <h2 className="vault-title">DEMO ARCHIVE VAULT</h2>
-            </div>
+            <h2 className="vault-title">DEMO LIBRARY</h2>
             <span className="vault-subtitle">
-              {demos.length} {demos.length === 1 ? "RECORD" : "RECORDS"} CACHED LOCALLY
+              {demos.length} {demos.length === 1 ? "demo" : "demos"} saved
             </span>
           </div>
           <button
             type="button"
             className="vault-close-btn"
             onClick={onClose}
-            aria-label="Close vault"
+            aria-label="Close library"
             title="Close [Esc or L]"
           >
             <kbd className="tech-kbd">ESC</kbd>
@@ -127,7 +124,7 @@ export function DemoLibrary({
           </button>
         </div>
 
-        {/* Precision Blueprint Dropzone */}
+        {/* Dropzone */}
         <div
           className={`vault-dropzone ${isDraggingOver ? "dragging-active" : ""}`}
           onDragOver={handleDragOver}
@@ -136,8 +133,8 @@ export function DemoLibrary({
         >
           <div className="dropzone-crosshair">
             <svg
-              width="20"
-              height="20"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -151,10 +148,10 @@ export function DemoLibrary({
           </div>
           <div className="dropzone-text-group">
             <span className="dropzone-primary-text">
-              DROP .DEM FILES TO RASTERIZE
+              Drop .dem files to load
             </span>
             <span className="dropzone-secondary-text">
-              GoldSrc HL1 / CS 1.6 / Unique-KZ Telemetry Parser
+              In-browser GoldSrc parser & jump analytics
             </span>
           </div>
         </div>
@@ -324,10 +321,10 @@ export function DemoLibrary({
           )}
         </div>
 
-        {/* Vault Footer */}
+        {/* Library Footer */}
         <div className="vault-footer">
           <span className="vault-security-note">
-            INDEXEDDB LOCAL STORAGE • ZERO EXTERNAL TELEMETRY
+            Client-side storage (IndexedDB)
           </span>
         </div>
       </aside>

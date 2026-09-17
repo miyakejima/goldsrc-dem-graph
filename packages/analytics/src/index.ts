@@ -233,9 +233,11 @@ function detectJumps(input: AnalyticsInput): JumpMetrics[] {
 
     // Jump classification:
     // Type 2 = Bhop / Standup Bhop (FOG <= 3)
-    // Type 1 = Longjump (from standing/prestrafe run, FOG > 3)
+    // Type 1 = Highjump (elevation diff abs(dz) >= 2.0)
+    // Type 0 = Longjump (flat ground, abs(dz) < 2.0)
     const isBhop = fog <= 3;
-    const typeVal = isBhop ? 2 : 1;
+    const isHighJump = !isBhop && Math.abs(dz) >= 2.0;
+    const typeVal = isBhop ? 2 : (isHighJump ? 1 : 0);
     const isStandup = isBhop ? (takeoff.cmd.buttons & IN_DUCK) === 0 : null;
     const isIdealBhop = isBhop ? fog <= 2 : null;
 

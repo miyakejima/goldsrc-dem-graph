@@ -44,15 +44,15 @@ export function AppHeader({
 
   return (
     <header className="tech-header" role="banner">
-      {/* Brand Terminal Console */}
+      {/* Brand: Raw repo name + user icon */}
       <div className="header-cell header-cell-brand">
         <div className="brand-group">
-          <span className="brand-terminal-symbol">//</span>
-          <span className="brand-name">KZ TELEMETRY</span>
-          <span className="brand-status-tag">
-            <span className="status-led-pulse" />
-            CLIENT RASTERIZER
-          </span>
+          <img
+            src="./icon.png"
+            alt="goldsrc-dem-graph"
+            className="brand-icon"
+          />
+          <span className="brand-name">goldsrc-dem-graph</span>
         </div>
       </div>
 

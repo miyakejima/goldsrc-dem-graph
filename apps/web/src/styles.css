@@ -2,53 +2,53 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Roboto Mono", "Cascadia Code", "Consolas", Menlo, monospace;
 
-  /* Web Page UI - Precision Industrial Light Theme (Default: Clean Laboratory Instrumentation) */
+  /* Clean Minimalist White Theme */
   --bg-page: #f8f9fa;
   --bg-surface: #ffffff;
   --bg-subtle: #f1f3f5;
-  --bg-active: #e9ecef;
+  --bg-active: #e5e7eb;
   --bg-hover: #f3f4f6;
   --border: #e2e4e9;
-  --border-strong: #c8cbd2;
+  --border-strong: #cbd0d6;
 
-  --text-primary: #121417;
-  --text-secondary: #383e47;
-  --text-muted: #6c757d;
-  --text-subtle: #9aa0a6;
+  --text-primary: #111111;
+  --text-secondary: #333333;
+  --text-muted: #666666;
+  --text-subtle: #999999;
 
   --tech-accent: #0284c7;
   --tech-accent-hover: #0369a1;
   --tech-accent-subtle: #e0f2fe;
 
-  --status-active: #10b981;
-  --status-active-glow: rgba(16, 185, 129, 0.25);
-  --star-gold: #f59e0b;
-  --danger: #ef4444;
+  --status-active: #15803d;
+  --status-active-glow: rgba(21, 128, 61, 0.2);
+  --star-gold: #eab308;
+  --danger: #dc2626;
 }
 
 [data-theme="dark"] {
-  /* Web Page UI - Precision Industrial Dark Theme (Avionics / Flight Telemetry Console) */
-  --bg-page: #0a0b0d;
-  --bg-surface: #111317;
-  --bg-subtle: #181b21;
-  --bg-active: #20242c;
-  --bg-hover: #1c2027;
-  --border: #232730;
-  --border-strong: #363c48;
+  /* True AMOLED Black Theme — Exact Unique-KZ Graph Parity */
+  --bg-page: #000000;
+  --bg-surface: #000000;
+  --bg-subtle: #0d0d0d;
+  --bg-active: #181818;
+  --bg-hover: #141414;
+  --border: #1f1f1f;
+  --border-strong: #333333;
 
-  --text-primary: #f3f4f6;
-  --text-secondary: #c5cad3;
-  --text-muted: #8b92a0;
-  --text-subtle: #596172;
+  --text-primary: #ffffff;
+  --text-secondary: #dddddd;
+  --text-muted: #888888;
+  --text-subtle: #555555;
 
-  --tech-accent: #38bdf8;
-  --tech-accent-hover: #0284c7;
-  --tech-accent-subtle: rgba(56, 189, 248, 0.12);
+  --tech-accent: #00ffff;
+  --tech-accent-hover: #33ffff;
+  --tech-accent-subtle: rgba(0, 255, 255, 0.08);
 
-  --status-active: #00ff88;
-  --status-active-glow: rgba(0, 255, 136, 0.35);
-  --star-gold: #fbbf24;
-  --danger: #f87171;
+  --status-active: #88aa00;
+  --status-active-glow: rgba(136, 170, 0, 0.35);
+  --star-gold: #ffaa00;
+  --danger: #ff3333;
 }
 
 * {
@@ -77,7 +77,7 @@ html, body {
 }
 
 /* ==========================================================================
-   Precision Telemetry Header (42px) — Industrial Console Standard
+   Header (42px) — Raw repo branding + clean navigation
    ========================================================================== */
 .tech-header {
   height: 42px;
@@ -100,55 +100,29 @@ html, body {
 }
 
 .header-cell-brand {
-  min-width: 220px;
+  min-width: 200px;
 }
 
 .brand-group {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
-.brand-terminal-symbol {
-  color: var(--tech-accent);
-  font-weight: 800;
-  font-size: 13px;
+.brand-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .brand-name {
-  font-size: 11.5px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  color: var(--text-primary);
-}
-
-.brand-status-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  border: 1px solid var(--border);
-  background: var(--bg-subtle);
-  padding: 2px 6px;
-  border-radius: 2px;
-}
-
-.status-led-pulse {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--status-active);
-  box-shadow: 0 0 6px var(--status-active-glow);
-  display: inline-block;
-  animation: pulseLed 2s infinite ease-in-out;
-}
-
-@keyframes pulseLed {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.85); }
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
 }
 
 /* Center Telemetry Readout Pill */
@@ -228,9 +202,14 @@ html, body {
 }
 
 .chip-techniques {
-  background: rgba(2, 132, 199, 0.08);
+  background: var(--tech-accent-subtle);
   border-color: rgba(2, 132, 199, 0.3);
   color: var(--tech-accent);
+}
+
+[data-theme="dark"] .chip-techniques {
+  border-color: rgba(0, 255, 255, 0.35);
+  color: #00ffff;
 }
 
 .chip-time, .chip-frames {
@@ -285,6 +264,17 @@ html, body {
   border-color: var(--tech-accent-hover);
 }
 
+[data-theme="dark"] .tech-btn.tech-btn-action {
+  background: #000000;
+  border-color: #00ffff;
+  color: #00ffff;
+}
+
+[data-theme="dark"] .tech-btn.tech-btn-action:hover {
+  background: #00ffff;
+  color: #000000;
+}
+
 .tech-kbd {
   font-family: var(--font-mono);
   font-size: 9px;
@@ -301,6 +291,18 @@ html, body {
   background: rgba(255, 255, 255, 0.2);
   border-color: rgba(255, 255, 255, 0.3);
   color: #ffffff;
+}
+
+[data-theme="dark"] .tech-btn.tech-btn-action .tech-kbd {
+  background: rgba(0, 255, 255, 0.15);
+  border-color: rgba(0, 255, 255, 0.4);
+  color: #00ffff;
+}
+
+[data-theme="dark"] .tech-btn.tech-btn-action:hover .tech-kbd {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(0, 0, 0, 0.5);
+  color: #000000;
 }
 
 .tech-count-badge {
@@ -867,6 +869,10 @@ html, body {
   background: var(--tech-accent);
   color: #ffffff;
   border-color: var(--tech-accent);
+}
+
+[data-theme="dark"] .vault-tab.active {
+  color: #000000;
 }
 
 /* Vault List Container */
