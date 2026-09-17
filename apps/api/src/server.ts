@@ -434,6 +434,86 @@ function convertGraphPayloadToDataset(sample: GraphPayload, demoId: string): Gra
     return diff;
   });
 
+  const minsZ = expandDeltaMap(sample.esp?.["mins[2]"], frames, -36);
+
+  // 1:1 Unique-KZ Jump Height Demo (measured) & Jump Height Calc (ballistic arc)
+  const jumpHeightDemo = new Array<number>(frames);
+  let groundZ = 0;
+  let hChange = 0;
+
+  for (let f = 0; f < frames; f++) {
+    if (f === 0) {
+      jumpHeightDemo[0] = 0;
+      continue;
+    }
+    const oz = originZ[f] ?? 0;
+    const mv = movetype[f] ?? 3;
+    const fl = flags[f] ?? 0;
+    const nextFl = flags[f + 1] ?? 0;
+
+    if ((fl & 512) && !(nextFl & 512)) {
+      hChange = 0;
+      groundZ = oz + (minsZ[f] ?? -36);
+      if (!bInDuck[f] && (fl & 16384) && !bInDuck[f + 1] && (nextFl & 16384)) {
+        groundZ -= 18;
+      }
+    } else if (mv === 5 || (fl & 512)) {
+      hChange = 0;
+    } else {
+      hChange = (oz - 36) - groundZ;
+    }
+    jumpHeightDemo[f] = hChange;
+  }
+
+  const jumpHeightCalc = new Array<number>(frames);
+  let hCalc = 0;
+  let vel = 0;
+  let skip = false;
+
+  for (let f = 0; f < frames; f++) {
+    if (f === 0) {
+      jumpHeightCalc[0] = 0;
+      continue;
+    }
+    const mv = movetype[f] ?? 3;
+    if (mv !== 3 && mv !== 5) skip = true;
+    const fl = flags[f] ?? 0;
+
+    if (fl & 512) {
+      skip = false;
+      hCalc = 0;
+      vel = 0;
+      if ((fuser2[f + 1] ?? 0) === 1315) {
+        vel = Math.sqrt(2.0 * 800.0 * 45.0);
+        const f2 = fuser2[f] ?? 0;
+        if (f2 > 0) {
+          vel *= (100.0 - f2 * 0.001 * 19.0) * 0.01;
+        }
+      }
+    } else if (mv === 5) {
+      skip = false;
+      hCalc = 0;
+      vel = velocityZ[f] ?? 0;
+    } else {
+      if (
+        vel === 0 &&
+        ((sample.cmd.buttons[f] ?? 0) & 4) &&
+        !((sample.cmd.buttons[f - 1] ?? 0) & 4) &&
+        !((sample.cmd.buttons[f + 1] ?? 0) & 4)
+      ) {
+        hCalc += 18;
+      }
+      const ft = sample.frametime[f + 1] ?? 0.01;
+      const ms = sample.cmd.msec[f + 1] ?? 10;
+      vel -= 800 * 0.5 * ft;
+      hCalc += vel * ms * 0.001;
+      vel -= 800 * 0.5 * ft;
+    }
+
+    if (skip) hCalc = 0;
+    jumpHeightCalc[f] = hCalc;
+  }
+
   const jumpLane = sample.cmd.buttons.map((b) => ((b & (1 << 1)) !== 0 ? 1 : 0));
   const groundLane = flags.map((f) => ((f & (1 << 9)) !== 0 ? 1 : 0));
   const duckLane = sample.cmd.buttons.map((b) => ((b & (1 << 2)) !== 0 ? 1 : 0));
@@ -499,7 +579,11 @@ function convertGraphPayloadToDataset(sample: GraphPayload, demoId: string): Gra
       mouseX,
       mouseXSpeed,
       pitch,
-      jumpHeight: originZ,
+      jumpHeight: jumpHeightDemo,
+      jumpHeightDemo,
+      jumpHeightCalc,
+      minsZ,
+      bInDuck,
       originX,
       originY,
       originZ,

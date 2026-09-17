@@ -140,6 +140,10 @@ export interface GraphViewerDataset {
     mouseX: number[];
     mouseXSpeed: number[];
     jumpHeight: number[];
+    jumpHeightDemo?: number[];
+    jumpHeightCalc?: number[];
+    minsZ?: number[];
+    bInDuck?: number[];
     originX: number[];
     originY: number[];
     originZ: number[];

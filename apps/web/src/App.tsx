@@ -273,16 +273,46 @@ function getPlotScale(lineKey: LineKey) {
       min: 0,
       max: 360,
       ticks: [
-        { value: 360, label: "360°", color: "#a0a7ae", y: 0 },
-        { value: 270, label: "270°", color: "#a0a7ae", y: 45 },
-        { value: 180, label: "180°", color: "#a0a7ae", y: 90 },
-        { value: 90, label: "90°", color: "#a0a7ae", y: 135 },
-        { value: 0, label: "0°", color: "#a0a7ae", y: 180 }
+        { value: 360, label: "360°", color: "#888888", y: 0 },
+        { value: 270, label: "270°", color: "#888888", y: 45 },
+        { value: 180, label: "180°", color: "#888888", y: 90 },
+        { value: 90, label: "90°", color: "#888888", y: 135 },
+        { value: 0, label: "0°", color: "#888888", y: 180 }
       ]
     };
   }
 
-  // 539_beautified.js line 178: engine fps ticks & colors
+  if (lineKey === "mouseXSpeed") {
+    return {
+      min: -11.25,
+      max: 11.25,
+      ticks: [
+        { value: 11.3, label: "11.3°", color: "#888888", y: 0 },
+        { value: 5.6, label: "5.6°", color: "#888888", y: 45 },
+        { value: 0.0, label: "0.0°", color: "#888888", y: 90 },
+        { value: -5.6, label: "-5.6°", color: "#888888", y: 135 },
+        { value: -11.3, label: "-11.3°", color: "#888888", y: 180 }
+      ]
+    };
+  }
+
+  if (lineKey === "jumpHeight") {
+    return {
+      min: -50,
+      max: 100,
+      ticks: [
+        { value: 100, label: "100u", color: "#888888", y: 0 },
+        { value: 75, label: "75u", color: "#888888", y: 30 },
+        { value: 50, label: "50u", color: "#888888", y: 60 },
+        { value: 25, label: "25u", color: "#888888", y: 90 },
+        { value: 0, label: "0u", color: "#888888", y: 120 },
+        { value: -25, label: "-25u", color: "#888888", y: 150 },
+        { value: -50, label: "-50u", color: "#888888", y: 180 }
+      ]
+    };
+  }
+
+  // engineFps & realFps (drawingHeight = 155, offset = 25)
   return {
     min: 0,
     max: 110,
@@ -494,6 +524,60 @@ export function App() {
     }
     return points;
   }, [lineKey, series]);
+
+  // RealFps rects/points (pure red #ff0000, 1:1 matching Unique-KZ)
+  const realFpsPoints = useMemo(() => {
+    if (lineKey !== "realFps" || !dataset?.dense.realFps) return [];
+    const arr = dataset.dense.realFps;
+    const points: Array<{ x: number; y: number; color: string }> = [];
+    for (let i = 0; i < arr.length; i += 1) {
+      const fps = arr[i] ?? 0;
+      if (fps <= 0) continue;
+      const y = fps > 100 ? 0 : 25 + ((100 - fps) * 155) / 100;
+      points.push({ x: i, y, color: "#ff0000" });
+    }
+    return points;
+  }, [lineKey, dataset]);
+
+  // MouseXSpeed points ((11.25 - deltaMouseX) * 8 in #aaaaaa, 1:1 matching Unique-KZ)
+  const mouseXSpeedPoints = useMemo(() => {
+    if (lineKey !== "mouseXSpeed" || !dataset?.dense.mouseXSpeed) return [];
+    const arr = dataset.dense.mouseXSpeed;
+    const points: Array<{ x: number; y: number }> = [];
+    for (let i = 1; i < arr.length; i += 1) {
+      const delta = arr[i] ?? 0;
+      const y = (11.25 - delta) * 8;
+      if (y > 0 && y < 180) {
+        points.push({ x: i, y });
+      }
+    }
+    return points;
+  }, [lineKey, dataset]);
+
+  // JumpHeight curves: Demo (measured, #aaaaaa) and Calc (ballistic, #00ffff)
+  const jumpHeightPoints = useMemo(() => {
+    if (lineKey !== "jumpHeight" || !dataset) return { demo: [], calc: [] };
+    const demoPoints: Array<{ x: number; y: number }> = [];
+    const calcPoints: Array<{ x: number; y: number }> = [];
+    const demoArr = dataset.dense.jumpHeightDemo ?? dataset.dense.jumpHeight ?? [];
+    const calcArr = dataset.dense.jumpHeightCalc ?? [];
+
+    for (let i = 0; i < demoArr.length; i += 1) {
+      const dh = demoArr[i] ?? 0;
+      if (dh > -50) {
+        const y = ((100 - dh) / 150) * 180;
+        demoPoints.push({ x: i, y });
+      }
+    }
+    for (let i = 0; i < calcArr.length; i += 1) {
+      const ch = calcArr[i] ?? 0;
+      if (ch > -50) {
+        const y = ((100 - ch) / 150) * 180;
+        calcPoints.push({ x: i, y });
+      }
+    }
+    return { demo: demoPoints, calc: calcPoints };
+  }, [lineKey, dataset]);
 
   const techniques: TechniqueVm[] = useMemo(() => {
     if (!dataset) return [];
@@ -915,7 +999,7 @@ export function App() {
                   <text
                     key={`tick-${tick.label}`}
                     x={75}
-                    y={tick.y + 4}
+                    y={tick.y === 0 ? 10 : tick.y + 4}
                     textAnchor="end"
                     className="axis-label"
                     fill={tick.color}
@@ -980,8 +1064,32 @@ export function App() {
                 {/* EngineFps points */}
                 {lineKey === "engineFps" &&
                   engineFpsPoints.map((pt, idx) => (
-                    <rect key={idx} x={pt.x} y={pt.y} width={1} height={1} fill={pt.color} />
+                    <rect key={idx} x={pt.x} y={pt.y} width={1} height={1} fill={pt.color} shapeRendering="crispEdges" />
                   ))}
+
+                {/* RealFps points (pure red #ff0000) */}
+                {lineKey === "realFps" &&
+                  realFpsPoints.map((pt, idx) => (
+                    <rect key={idx} x={pt.x} y={pt.y} width={1} height={1} fill={pt.color} shapeRendering="crispEdges" />
+                  ))}
+
+                {/* MouseX Speed points (#aaaaaa) */}
+                {lineKey === "mouseXSpeed" &&
+                  mouseXSpeedPoints.map((pt, idx) => (
+                    <rect key={idx} x={pt.x} y={pt.y} width={1} height={1} fill="#aaaaaa" shapeRendering="crispEdges" />
+                  ))}
+
+                {/* Jump Height curves: Demo (#aaaaaa) and Calc (#00ffff) */}
+                {lineKey === "jumpHeight" && (
+                  <>
+                    {jumpHeightPoints.demo.map((pt, idx) => (
+                      <rect key={`jhd-${idx}`} x={pt.x} y={pt.y} width={1} height={1} fill="#aaaaaa" shapeRendering="crispEdges" />
+                    ))}
+                    {jumpHeightPoints.calc.map((pt, idx) => (
+                      <rect key={`jhc-${idx}`} x={pt.x} y={pt.y} width={1} height={1} fill="#00ffff" shapeRendering="crispEdges" />
+                    ))}
+                  </>
+                )}
 
                 {/* 12 Lanes */}
                 {lanePositions.map((lane) => {
@@ -1239,17 +1347,33 @@ export function App() {
                 />
               </svg>
 
-              {/* MouseX Tooltip */}
-              {lineKey === "mouseX" && (
+              {/* MouseX & MouseX Speed Tooltip */}
+              {(lineKey === "mouseX" || lineKey === "mouseXSpeed") && (
                 <div
                   className="mouse-tooltip"
                   style={{
                     left: cursorX + 8,
-                    top: Math.min(145, Math.max(0, (1 - clamp(series[frameIndex] ?? 0, 0, 360) / 360) * 180 - 15))
+                    top: lineKey === "mouseX"
+                      ? Math.min(145, Math.max(0, (1 - clamp(dataset.dense.mouseX[frameIndex] ?? 0, 0, 360) / 360) * 180 - 15))
+                      : Math.min(145, Math.max(0, (11.25 - (dataset.dense.mouseXSpeed[frameIndex] ?? 0)) * 8 - 15))
                   }}
                 >
-                  <div className="mouse-tooltip-row"><span>Angle:</span><strong>{formatNum(series[frameIndex] ?? 0, 3)}</strong></div>
+                  <div className="mouse-tooltip-row"><span>Angle:</span><strong>{formatNum(dataset.dense.mouseX[frameIndex] ?? 0, 3)}</strong></div>
                   <div className="mouse-tooltip-row"><span>YawSpeed:</span><strong>{formatNum(dataset.dense.mouseXSpeed[frameIndex] ?? 0, 3)}</strong></div>
+                </div>
+              )}
+
+              {/* Jump Height Tooltip */}
+              {lineKey === "jumpHeight" && (
+                <div
+                  className="mouse-tooltip"
+                  style={{
+                    left: cursorX + 8,
+                    top: Math.min(145, Math.max(0, ((100 - (dataset.dense.jumpHeightDemo?.[frameIndex] ?? dataset.dense.jumpHeight?.[frameIndex] ?? 0)) / 150) * 180 - 15))
+                  }}
+                >
+                  <div className="mouse-tooltip-row"><span>Height:</span><strong>{formatNum(dataset.dense.jumpHeightDemo?.[frameIndex] ?? dataset.dense.jumpHeight?.[frameIndex] ?? 0, 3)}u</strong></div>
+                  <div className="mouse-tooltip-row"><span>Calc:</span><strong style={{ color: "#00ffff" }}>{formatNum(dataset.dense.jumpHeightCalc?.[frameIndex] ?? 0, 3)}u</strong></div>
                 </div>
               )}
 
