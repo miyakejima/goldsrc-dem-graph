@@ -22,6 +22,8 @@ dist/
 
 # Rust build artifacts
 parser-rs/target/
+bin/
+*.exe
 
 # Generated analysis workspace
 re_data/*

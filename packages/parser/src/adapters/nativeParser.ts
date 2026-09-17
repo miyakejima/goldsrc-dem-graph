@@ -17,10 +17,13 @@ export interface NativeParsedResult {
 function findNativeParserBinary(): string | null {
   const candidates = [
     path.resolve(process.cwd(), "bin", "unique_graph_dem_parser.exe"),
+    path.resolve(process.cwd(), "parser-rs", "target", "release", "unique_graph_dem_parser.exe"),
     path.resolve(process.cwd(), "..", "..", "bin", "unique_graph_dem_parser.exe"),
+    path.resolve(process.cwd(), "..", "..", "parser-rs", "target", "release", "unique_graph_dem_parser.exe"),
     path.resolve(__dirname, "..", "..", "..", "bin", "unique_graph_dem_parser.exe"),
     path.resolve(__dirname, "..", "..", "..", "..", "bin", "unique_graph_dem_parser.exe"),
-    "C:\\Users\\yeah\\Documents\\recreation\\codex_kz_rebuild_package\\bin\\unique_graph_dem_parser.exe"
+    path.resolve(__dirname, "..", "..", "..", "parser-rs", "target", "release", "unique_graph_dem_parser.exe"),
+    path.resolve(__dirname, "..", "..", "..", "..", "parser-rs", "target", "release", "unique_graph_dem_parser.exe"),
   ];
 
   for (const candidate of candidates) {
