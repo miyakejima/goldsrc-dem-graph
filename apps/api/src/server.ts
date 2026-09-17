@@ -584,6 +584,7 @@ function convertGraphPayloadToDataset(sample: GraphPayload, demoId: string): Gra
       jumpHeightCalc,
       minsZ,
       bInDuck,
+      isPaused: sample.is_paused,
       originX,
       originY,
       originZ,

@@ -144,6 +144,7 @@ export interface GraphViewerDataset {
     jumpHeightCalc?: number[];
     minsZ?: number[];
     bInDuck?: number[];
+    isPaused?: number[];
     originX: number[];
     originY: number[];
     originZ: number[];

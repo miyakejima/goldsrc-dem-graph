@@ -176,6 +176,44 @@ function buildSegmentsWithMinGap(values: number[], minGap = 1): Segment[] {
   return merged;
 }
 
+function buildSequenceRects(
+  values: number[],
+  getYAndColor: (val: number, idx: number) => { y: number; color: string } | null
+): Array<{ x: number; y: number; width: number; color: string }> {
+  const rects: Array<{ x: number; y: number; width: number; color: string }> = [];
+  let currentStart = -1;
+  let currentY = -1;
+  let currentColor = "";
+
+  for (let i = 0; i < values.length; i++) {
+    const res = getYAndColor(values[i] ?? 0, i);
+    if (!res) {
+      if (currentStart !== -1) {
+        rects.push({ x: currentStart, y: currentY, width: i - currentStart, color: currentColor });
+        currentStart = -1;
+      }
+      continue;
+    }
+
+    if (currentStart === -1) {
+      currentStart = i;
+      currentY = res.y;
+      currentColor = res.color;
+    } else if (res.y !== currentY || res.color !== currentColor) {
+      rects.push({ x: currentStart, y: currentY, width: i - currentStart, color: currentColor });
+      currentStart = i;
+      currentY = res.y;
+      currentColor = res.color;
+    }
+  }
+
+  if (currentStart !== -1) {
+    rects.push({ x: currentStart, y: currentY, width: values.length - currentStart, color: currentColor });
+  }
+
+  return rects;
+}
+
 function computeJumpCommandLines(
   totalFrames: number,
   commands: Record<string, string> | undefined,
@@ -470,7 +508,8 @@ export function App() {
   }, [dataset]);
 
   const graphWidth = Math.max(1, totalFrames);
-  const plotTop = 0;
+  // Unique-KZ class f: position() { return new Point(0, 15); } - upper graph container top offset is 15px
+  const plotTop = 15;
 
   // 539_beautified.js line 2309: barsContainer.position.y = bounds.height - barsDrawingHeight
   // Top HUD = 130px, Tabs = 30px, Scrollbar = 20px. GraphicWindow height = viewportHeight - 180
@@ -509,7 +548,7 @@ export function App() {
     }
     if (current) segments.push(current);
     return segments;
-  }, [lineKey, series]);
+  }, [lineKey, series, plotTop]);
 
   // EngineFps rects/points (NO vertical drop lines)
   const engineFpsPoints = useMemo(() => {
@@ -519,11 +558,11 @@ export function App() {
       const fps = series[i] ?? 0;
       if (fps <= 0) continue;
       const isOver100 = fps > 100;
-      const y = isOver100 ? 0 : 25 + ((100 - fps) * 155) / 100;
+      const y = plotTop + (isOver100 ? 0 : 25 + ((100 - fps) * 155) / 100);
       points.push({ x: i, y, color: isOver100 ? "#ff0000" : "#ffa000" });
     }
     return points;
-  }, [lineKey, series]);
+  }, [lineKey, series, plotTop]);
 
   // RealFps rects/points (pure red #ff0000, 1:1 matching Unique-KZ)
   const realFpsPoints = useMemo(() => {
@@ -533,11 +572,11 @@ export function App() {
     for (let i = 0; i < arr.length; i += 1) {
       const fps = arr[i] ?? 0;
       if (fps <= 0) continue;
-      const y = fps > 100 ? 0 : 25 + ((100 - fps) * 155) / 100;
+      const y = plotTop + (fps > 100 ? 0 : 25 + ((100 - fps) * 155) / 100);
       points.push({ x: i, y, color: "#ff0000" });
     }
     return points;
-  }, [lineKey, dataset]);
+  }, [lineKey, dataset, plotTop]);
 
   // MouseXSpeed points ((11.25 - deltaMouseX) * 8 in #aaaaaa, 1:1 matching Unique-KZ)
   const mouseXSpeedPoints = useMemo(() => {
@@ -546,13 +585,13 @@ export function App() {
     const points: Array<{ x: number; y: number }> = [];
     for (let i = 1; i < arr.length; i += 1) {
       const delta = arr[i] ?? 0;
-      const y = (11.25 - delta) * 8;
-      if (y > 0 && y < 180) {
+      const y = plotTop + (11.25 - delta) * 8;
+      if (y > plotTop && y < plotTop + 180) {
         points.push({ x: i, y });
       }
     }
     return points;
-  }, [lineKey, dataset]);
+  }, [lineKey, dataset, plotTop]);
 
   // JumpHeight curves: Demo (measured, #aaaaaa) and Calc (ballistic, #00ffff)
   const jumpHeightPoints = useMemo(() => {
@@ -565,19 +604,19 @@ export function App() {
     for (let i = 0; i < demoArr.length; i += 1) {
       const dh = demoArr[i] ?? 0;
       if (dh > -50) {
-        const y = ((100 - dh) / 150) * 180;
+        const y = plotTop + ((100 - dh) / 150) * 180;
         demoPoints.push({ x: i, y });
       }
     }
     for (let i = 0; i < calcArr.length; i += 1) {
       const ch = calcArr[i] ?? 0;
       if (ch > -50) {
-        const y = ((100 - ch) / 150) * 180;
+        const y = plotTop + ((100 - ch) / 150) * 180;
         calcPoints.push({ x: i, y });
       }
     }
     return { demo: demoPoints, calc: calcPoints };
-  }, [lineKey, dataset]);
+  }, [lineKey, dataset, plotTop]);
 
   const techniques: TechniqueVm[] = useMemo(() => {
     if (!dataset) return [];
@@ -994,12 +1033,12 @@ export function App() {
             {/* Left Axis Gutter (80px wide) */}
             <div className="left-axis-gutter">
               <svg width={80} height={graphHeight} className="left-gutter-svg">
-                {/* Plot scale ticks */}
+                {/* Plot scale ticks (Unique-KZ anchor (1, 1): bottom aligned directly on top of line) */}
                 {scale.ticks.map((tick) => (
                   <text
                     key={`tick-${tick.label}`}
                     x={75}
-                    y={tick.y === 0 ? 10 : tick.y + 4}
+                    y={plotTop + tick.y - 2}
                     textAnchor="end"
                     className="axis-label"
                     fill={tick.color}
@@ -1047,9 +1086,9 @@ export function App() {
                   <line
                     key={`gl-${tick.label}`}
                     x1={0}
-                    y1={tick.y}
+                    y1={plotTop + tick.y}
                     x2={graphWidth}
-                    y2={tick.y}
+                    y2={plotTop + tick.y}
                     stroke="#444444"
                     strokeWidth={1}
                   />
@@ -1347,33 +1386,19 @@ export function App() {
                 />
               </svg>
 
-              {/* MouseX & MouseX Speed Tooltip */}
+              {/* MouseX & MouseX Speed Tooltip (1:1 with Unique-KZ createStatsContainer) */}
               {(lineKey === "mouseX" || lineKey === "mouseXSpeed") && (
                 <div
                   className="mouse-tooltip"
                   style={{
                     left: cursorX + 8,
                     top: lineKey === "mouseX"
-                      ? Math.min(145, Math.max(0, (1 - clamp(dataset.dense.mouseX[frameIndex] ?? 0, 0, 360) / 360) * 180 - 15))
-                      : Math.min(145, Math.max(0, (11.25 - (dataset.dense.mouseXSpeed[frameIndex] ?? 0)) * 8 - 15))
+                      ? Math.min(160, Math.max(15, plotTop + (1 - clamp(dataset.dense.mouseX[frameIndex] ?? 0, 0, 360) / 360) * 180 - 15))
+                      : Math.min(160, Math.max(15, plotTop + (11.25 - (dataset.dense.mouseXSpeed[frameIndex] ?? 0)) * 8 - 15))
                   }}
                 >
                   <div className="mouse-tooltip-row"><span>Angle:</span><strong>{formatNum(dataset.dense.mouseX[frameIndex] ?? 0, 3)}</strong></div>
                   <div className="mouse-tooltip-row"><span>YawSpeed:</span><strong>{formatNum(dataset.dense.mouseXSpeed[frameIndex] ?? 0, 3)}</strong></div>
-                </div>
-              )}
-
-              {/* Jump Height Tooltip */}
-              {lineKey === "jumpHeight" && (
-                <div
-                  className="mouse-tooltip"
-                  style={{
-                    left: cursorX + 8,
-                    top: Math.min(145, Math.max(0, ((100 - (dataset.dense.jumpHeightDemo?.[frameIndex] ?? dataset.dense.jumpHeight?.[frameIndex] ?? 0)) / 150) * 180 - 15))
-                  }}
-                >
-                  <div className="mouse-tooltip-row"><span>Height:</span><strong>{formatNum(dataset.dense.jumpHeightDemo?.[frameIndex] ?? dataset.dense.jumpHeight?.[frameIndex] ?? 0, 3)}u</strong></div>
-                  <div className="mouse-tooltip-row"><span>Calc:</span><strong style={{ color: "#00ffff" }}>{formatNum(dataset.dense.jumpHeightCalc?.[frameIndex] ?? 0, 3)}u</strong></div>
                 </div>
               )}
 
