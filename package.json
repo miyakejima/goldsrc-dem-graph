@@ -12,6 +12,7 @@
     "dev:api": "npm --workspace @kz-rebuild/api run dev",
     "dev:web": "npm --workspace @kz-rebuild/web run dev",
     "build": "npm run --workspaces build",
+    "deploy": "npm run build --workspace=@kz-rebuild/web && npx gh-pages -d apps/web/dist -b gh-pages",
     "typecheck": "npm run --workspaces typecheck",
     "test:parser": "npm --workspace @kz-rebuild/parser run test"
   },
