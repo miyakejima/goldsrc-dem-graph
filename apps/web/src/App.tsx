@@ -321,6 +321,15 @@ function jumpTitle(jump: GraphViewerJump | TechniqueVm): string {
   if (jump.label === "bhop" || jump.label === "bj") return "Bhop jump";
   if (jump.label === "cj") return "Count jump";
   if (jump.label === "scj") return "Stand-up count jump";
+  if (jump.label === "dcj") return "Multi count jump";
+  if (jump.label === "dscj") return "Multi stand-up count jump";
+  if (jump.label === "wj") return "Weird jump";
+  if (jump.label === "ldj") return "Ladder jump";
+  if (jump.label === "slj") return "Slide longjump";
+  if (jump.label === "jb") return "Jump bug";
+  if (jump.label === "eb") return "Edge bug";
+  if (jump.label === "sb") return "Slide bug";
+  if (jump.label === "db") return "Duck bug";
   return "Long jump";
 }
 
@@ -379,31 +388,85 @@ export function App() {
     }
   };
 
-  // Seed IndexedDB with sample demo if empty
+  // Seed IndexedDB with sample demo if empty or missing techniques
   useEffect(() => {
     void (async () => {
       const list = await refreshLibrary();
-      if (list.length === 0) {
+      const existingSample = list.find((d) => d.id === "sample");
+      const needsSeed =
+        list.length === 0 ||
+        !existingSample ||
+        !existingSample.dataset?.jumps ||
+        existingSample.dataset.jumps.length === 0;
+
+      if (needsSeed) {
         try {
+          clientDemoStore.delete("sample");
           const sampleData = await getGraphViewer("sample");
-          const duration = sampleData.dense.time[sampleData.dense.time.length - 1] || 85.35;
+          const duration =
+            sampleData.dense.time[sampleData.dense.time.length - 1] || 85.35;
           const seedRecord: SavedDemoRecord = {
             id: "sample",
             filename: sampleData.meta.filename || "sample_betty.dem",
             mapname: sampleData.meta.mapname || "kz_ea_sybhop",
             frames: sampleData.meta.frames,
             duration,
-            createdAt: Date.now(),
-            isFavorite: true,
+            createdAt: existingSample?.createdAt ?? Date.now(),
+            isFavorite: existingSample?.isFavorite ?? true,
             dataset: sampleData
           };
           await saveDemoRecord(seedRecord);
           await refreshLibrary();
+          if (demoId === "sample" || !dataset) {
+            setDataset(sampleData);
+          }
         } catch (err) {
           console.warn("Failed to seed sample demo in IndexedDB:", err);
         }
       }
     })();
+  }, [demoId]);
+
+  // Global Keyboard Shortcuts (O: Open, L: Library, T: Theme, F: Fullscreen)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement
+      ) {
+        return;
+      }
+      if (e.key === "o" || e.key === "O") {
+        if (!e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          fileInputRef.current?.click();
+        }
+      } else if (e.key === "l" || e.key === "L") {
+        if (!e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          setIsLibraryOpen((prev) => !prev);
+        }
+      } else if (e.key === "t" || e.key === "T") {
+        if (!e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          toggleTheme();
+        }
+      } else if (e.key === "f" || e.key === "F") {
+        if (!e.ctrlKey && !e.metaKey) {
+          e.preventDefault();
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen?.().catch(() => {});
+          } else {
+            document.exitFullscreen?.().catch(() => {});
+          }
+        }
+      } else if (e.key === "Escape") {
+        setIsLibraryOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const handleFileUpload = async (file: File) => {
@@ -958,6 +1021,9 @@ export function App() {
         activeDemoName={dataset?.meta.filename || demoId}
         activeMapName={dataset?.meta.mapname || ""}
         demoCount={savedDemos.length}
+        framesCount={dataset?.meta.frames}
+        durationSeconds={dataset?.dense.time?.[dataset.dense.time.length - 1]}
+        techniquesCount={techniques.length}
         onOpenLibrary={() => setIsLibraryOpen(true)}
         onTriggerUpload={() => fileInputRef.current?.click()}
       />

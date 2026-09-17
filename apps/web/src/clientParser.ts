@@ -143,21 +143,57 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
   const moveleftLane = buttons.map((b) => ((b & (1 << 9)) !== 0 ? 1 : 0));
   const moverightLane = buttons.map((b) => ((b & (1 << 10)) !== 0 ? 1 : 0));
 
+  const Ht = {
+    LongJump: { text: "lj", color: "#228b22", name: "Long jump" },
+    HighJump: { text: "hj", color: "#005500", name: "High jump" },
+    BhopJump: { text: "bj", color: "#36648b", name: "Bhop jump" },
+    StandupBhopJump: { text: "sbj", color: "#00546e", name: "Stand-up bhop jump" },
+    WeirdJump: { text: "wj", color: "#8b3a3a", name: "Weird jump" },
+    CountJump: { text: "cj", color: "#daa520", name: "Count jump" },
+    StandupCountJump: { text: "scj", color: "#a0522d", name: "Stand-up count jump" },
+    DoubleCountJump: { text: "dcj", color: "#ab7d0c", name: "Multi count jump" },
+    DoubleStandupCountJump: { text: "dscj", color: "#844213", name: "Multi stand-up count jump" },
+    LadderJump: { text: "ldj", color: "#1acdb7", name: "Ladder jump" },
+    SlideLongJump: { text: "slj", color: "#1e7878", name: "Slide longjump" }
+  };
+
+  function getTechniqueInfo(t: { type?: number; isStandup?: boolean | null; doubleDucks?: number | null }) {
+    switch (t.type) {
+      case 0: return Ht.LongJump;
+      case 1: return Ht.HighJump;
+      case 2: return t.isStandup ? Ht.StandupBhopJump : Ht.BhopJump;
+      case 3: return Ht.WeirdJump;
+      case 4: return (t.doubleDucks ?? 0) > 1
+        ? (t.isStandup ? Ht.DoubleStandupCountJump : Ht.DoubleCountJump)
+        : (t.isStandup ? Ht.StandupCountJump : Ht.CountJump);
+      case 6: return Ht.LadderJump;
+      case 7: return Ht.SlideLongJump;
+      default: return Ht.LongJump;
+    }
+  }
+
   const jumps = (analytics?.jumpMetrics ?? []).map((j) => {
-    const label = j.type ? String(j.type).toLowerCase() : "lj";
+    const tech = getTechniqueInfo(j);
     return {
       startFrame: Number(j.jumpoffFrame ?? 0),
       endFrame: Number(j.landingFrame ?? 0),
       distance: Number(j.distance ?? 0),
-      distanceXy: Number(j.distance ?? 0),
+      distanceXy: j.distanceXy !== null && j.distanceXy !== undefined ? Number(j.distanceXy) : undefined,
       maxspeed: Number(j.maxspeed ?? 0),
       prestrafe: Number(j.prestrafe ?? 0),
       strafes: Number(j.strafes ?? 0),
       sync: Number(j.sync ?? 0),
-      label,
-      color: label === "sbj" ? "#00546e" : (label === "hj" ? "#005500" : (label === "lj" ? "#228b22" : "#36648b")),
+      label: tech.text,
+      color: tech.color,
+      isStandup: Boolean(j.isStandup),
+      isIdealBhop: Boolean(j.isIdealBhop),
+      block: j.block !== null && j.block !== undefined ? Number(j.block) : undefined,
+      jumpoff: Number(j.jumpoff ?? 0),
+      landing: Number(j.landing ?? 0),
       frames: Number(j.frames ?? 0),
-      framesInDuck: 0
+      framesInDuck: Number(j.framesInDuck ?? 0),
+      preJumpVelocityJumpoff: j.preJumpVelocityJumpoff !== null && j.preJumpVelocityJumpoff !== undefined ? Number(j.preJumpVelocityJumpoff) : undefined,
+      preJumpVelocityBeforeJumpoff: j.preJumpVelocityBeforeJumpoff !== null && j.preJumpVelocityBeforeJumpoff !== undefined ? Number(j.preJumpVelocityBeforeJumpoff) : undefined
     };
   });
 

@@ -11,34 +11,32 @@ export function ThemeToggle({ theme, onToggle }: ThemeToggleProps) {
   return (
     <button
       type="button"
-      className="theme-toggle-btn"
+      className="tech-btn tech-btn-theme"
       onClick={onToggle}
-      title={`Switch to ${isLight ? "dark" : "light"} mode`}
-      aria-label={`Switch to ${isLight ? "dark" : "light"} mode`}
+      title={`Toggle theme [T] (Currently: ${isLight ? "Light Laboratory" : "Dark Console"})`}
+      aria-label={`Toggle theme (Currently: ${isLight ? "Light" : "Dark"})`}
     >
       {isLight ? (
-        // Clean Moon SVG for Light Mode
         <svg
-          width="16"
-          height="16"
+          width="13"
+          height="13"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2"
+          strokeWidth="2.25"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
           <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
         </svg>
       ) : (
-        // Clean Sun SVG for Dark Mode
         <svg
-          width="16"
-          height="16"
+          width="13"
+          height="13"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2"
+          strokeWidth="2.25"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
@@ -53,7 +51,8 @@ export function ThemeToggle({ theme, onToggle }: ThemeToggleProps) {
           <path d="m19.07 4.93-1.41 1.41" />
         </svg>
       )}
-      <span className="theme-toggle-label">{isLight ? "Dark" : "Light"}</span>
+      <span className="btn-text">{isLight ? "DARK" : "LIGHT"}</span>
+      <kbd className="tech-kbd">T</kbd>
     </button>
   );
 }
