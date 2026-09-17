@@ -22,8 +22,6 @@
 
 <p align="center">
   <a href="https://miyakejima.github.io/goldsrc-dem-graph/"><strong>Launch Live App</strong></a> ·
-  <a href="#why-this-exists">Why This Exists</a> ·
-  <a href="#interactive-telemetry-demo">Interactive Demo</a> ·
   <a href="#workstation-previews">Workstation Previews</a> ·
   <a href="#telemetry--metrics">Telemetry & Metrics</a> ·
   <a href="#jump-techniques-parity">Jump Techniques</a> ·
@@ -39,26 +37,11 @@
 
 ---
 
-## Interactive Telemetry Demo
-
 <p align="center">
   <a href="https://miyakejima.github.io/goldsrc-dem-graph/">
-    <img src="./docs/goldsrc-dem-graph-demo.gif" alt="goldsrc-dem-graph interactive demonstration" width="100%" style="border-radius: 6px; border: 1px solid #222222; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
+    <img src="./docs/goldsrc-dem-graph-demo.gif" alt="goldsrc-dem-graph demo" width="100%" style="border-radius: 6px; border: 1px solid #222222; box-shadow: 0 16px 48px rgba(0,0,0,0.6);">
   </a>
 </p>
-
----
-
-## Why This Exists
-
-Analyzing GoldSrc Kreedz and Bhop runs historically required running Counter-Strike 1.6 with specialized AMX Mod X server plugins (`uq_jumpstats`, `kz_ljs_xm`), setting up heavy offline recording suites, or uploading private demo files to third-party web services.
-
-**goldsrc-dem-graph** reconstructs the authentic Unique-KZ telemetry environment inside the browser:
-
-- **100% Client-Side Execution**: Powered by `@kz-rebuild/parser/browser`, binary demo packets are parsed in-memory using WebAssembly and Node-compatible typed arrays. Parsing 100,000+ frames completes in ~15 milliseconds.
-- **Zero Server Dependencies**: Demos are never sent over the network. All movement analytics, strafe synchronization measurements, and technique classifications execute entirely on your machine.
-- **Offline Storage**: The built-in Demo Library uses browser-native `IndexedDB` to cache parsed runs locally, enabling instant offline access, search filtering, and technique auditing.
-- **Exact Visual Parity**: Mapped 1:1 against the original Unique-KZ canvas geometry, curve colors, 12-lane input matrix, and 5-column HUD telemetry panel.
 
 ---
 
