@@ -142,7 +142,10 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
   for (let f = 0; f < totalFrames - 1; f++) {
     const prevGround = frames[f].onground !== 0;
     const nextGround = frames[f + 1].onground !== 0;
-    const hasJump = (frames[f].cmd.buttons & (1 << 1)) !== 0 || (frames[f + 1].cmd.buttons & (1 << 1)) !== 0;
+    const cmdStr = (normalized.commandsByFrame[String(f + 1)] || "").toLowerCase();
+    const hasJump = (frames[f].cmd.buttons & (1 << 1)) !== 0 ||
+                    (frames[f + 1].cmd.buttons & (1 << 1)) !== 0 ||
+                    cmdStr.includes("+jump");
     if (prevGround && !nextGround && hasJump) {
       fuser2[f + 1] = 1315;
     }

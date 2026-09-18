@@ -92,13 +92,28 @@ export function normalizeParsedDemo(params: {
   size: number;
   raw: RawParsedDemo;
 }): NormalizedDemo {
-  const frameCandidates = params.raw.frames
-    .filter((frame: RawFrame) => frame.frameType === 0 || frame.frameType === 1 || frame.frameType === 2)
-    .filter((frame: RawFrame) => Number.isFinite(frame.time) && frame.frameNumber >= 0);
+  type FrameWithCommands = RawFrame & { _pendingCmds?: string };
+  const netMsgFrames: FrameWithCommands[] = [];
+  let pendingCmds: string[] = [];
 
-  const runs: RawFrame[][] = [];
-  let currentRun: RawFrame[] = [];
-  for (const frame of frameCandidates) {
+  for (const frame of params.raw.frames) {
+    if (frame.frameType === 3 && frame.clientCommand) {
+      pendingCmds.push(frame.clientCommand.trim());
+    } else if (frame.frameType === 0 || frame.frameType === 1 || frame.frameType === 2) {
+      if (Number.isFinite(frame.time) && frame.frameNumber >= 0) {
+        const copy: FrameWithCommands = { ...frame };
+        if (pendingCmds.length > 0) {
+          copy._pendingCmds = pendingCmds.join("; ");
+          pendingCmds = [];
+        }
+        netMsgFrames.push(copy);
+      }
+    }
+  }
+
+  const runs: FrameWithCommands[][] = [];
+  let currentRun: FrameWithCommands[] = [];
+  for (const frame of netMsgFrames) {
     const previous = currentRun[currentRun.length - 1];
     if (!previous) {
       currentRun.push(frame);
@@ -122,7 +137,7 @@ export function normalizeParsedDemo(params: {
   }
 
   const longestRun = runs.sort((a, b) => b.length - a.length)[0] ?? [];
-  const framesWithTime: RawFrame[] = [];
+  const framesWithTime: FrameWithCommands[] = [];
   for (const frame of longestRun) {
     const previous = framesWithTime[framesWithTime.length - 1];
     if (!previous) {
@@ -140,10 +155,19 @@ export function normalizeParsedDemo(params: {
 
   let previousTime = 0;
   const normalizedFrames: NormalizedDemo["frames"] = [];
-  for (const frame of framesWithTime) {
+  const commandsByFrame: Record<string, string> = {};
+
+  for (let i = 0; i < framesWithTime.length; i += 1) {
+    const frame = framesWithTime[i];
+    const seqFrameNumber = i + 1;
     const converted = frameToNormalized(frame, previousTime);
+    converted.normalized.frameNumber = seqFrameNumber;
     normalizedFrames.push(converted.normalized);
     previousTime = converted.nextPreviousTime;
+
+    if (frame._pendingCmds) {
+      commandsByFrame[String(seqFrameNumber)] = frame._pendingCmds;
+    }
   }
 
   const playerEntries = (Object.values(params.raw.playersBySlot) as string[])
@@ -173,16 +197,6 @@ export function normalizeParsedDemo(params: {
     sv_rollangle: 0,
     sv_rollspeed: 0
   };
-
-  const commandsByFrame: Record<string, string> = {};
-  for (const frame of params.raw.frames) {
-    if (frame.frameType === 3 && frame.clientCommand) {
-      const key = String(frame.frameNumber);
-      commandsByFrame[key] = commandsByFrame[key]
-        ? `${commandsByFrame[key]}; ${frame.clientCommand}`
-        : frame.clientCommand;
-    }
-  }
 
   const IN_JUMP = 1 << 1;
   const IN_DUCK = 1 << 2;

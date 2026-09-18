@@ -198,10 +198,14 @@ function computeJumpCommandLines(
     const releasedIndex = a.indexOf("-jump");
     if (pressedIndex === -1 && releasedIndex === -1) continue;
 
+    const btnCur = btns[t - 1] ?? 0;
+    const btnNext = btns[t] ?? 0;
+    const f2Next = f2[t] ?? 0;
+
     let color: number | undefined;
     if (releasedIndex !== -1 && pressedIndex !== -1) {
       if (releasedIndex > pressedIndex) {
-        color = (f2[t + 1] === 1315) ? 0x00FF00 : 0x008800;
+        color = (f2Next === 1315) ? 0x00FF00 : 0x008800;
       } else if (s.indexOf("-jump") !== -1 && s.indexOf("+jump") === -1) {
         color = 0xFF00FF;
       } else {
@@ -213,10 +217,10 @@ function computeJumpCommandLines(
       color = 0x0000FF;
     }
 
-    if (pressedIndex !== -1 && !((btns[t + 1] ?? 0) & 2)) {
+    if (pressedIndex !== -1 && !(btnNext & 2)) {
       color = 0xFFFFFF;
     }
-    if (f2[t + 1] === 1315 && ((btns[t] ?? 0) & 2)) {
+    if (f2Next === 1315 && (btnCur & 2)) {
       color = 0xFFAA00;
     }
     if (a.indexOf("+jump", pressedIndex + 1) !== -1 && a.indexOf("-jump", releasedIndex + 1) !== -1) {
@@ -224,11 +228,11 @@ function computeJumpCommandLines(
     }
 
     // Upstream Unique-KZ fallback: non-canonical / isolated command lines resolve to
-    // jumpoff (#00FF00) or air scroll (#008800) if pulse, or are discarded.
+    // jumpoff (#00FF00) or air scroll (#008800) if pulse, or are discarded (matching upstream return;).
     if (color !== undefined && [0xFFFFFF, 0xFF0000, 0x0000FF, 0x00FFFF, 0xFF00FF].indexOf(color) !== -1) {
-      const isPulse = ((btns[t] ?? 0) & 2) !== 0 && ((btns[t + 1] ?? 0) & 2) === 0;
+      const isPulse = (btnCur & 2) !== 0 && (btnNext & 2) === 0;
       if (isPulse) {
-        color = (f2[t + 1] === 1315) ? 0x00FF00 : 0x008800;
+        color = (f2Next === 1315) ? 0x00FF00 : 0x008800;
       } else {
         continue;
       }
@@ -247,27 +251,7 @@ function computeJumpCommandLines(
   return lines;
 }
 
-function computeJumpHoldSegments(
-  totalFrames: number,
-  commands: Record<string, string> | undefined,
-  buttons: number[] | undefined
-): Segment[] {
-  const mask = new Array<number>(totalFrames);
-  const btns = buttons ?? [];
-  const cmds = commands ?? {};
-  for (let t = 0; t < totalFrames; t++) {
-    const isBtn = ((btns[t + 1] ?? 0) & 2) !== 0;
-    if (!isBtn) {
-      mask[t] = 0;
-      continue;
-    }
-    const c = (cmds[String(t)] || "").toLowerCase();
-    const isScrollTick = c.includes("+jump") && c.includes("-jump");
-    // Only hold spacebar if the button is held and it is NOT a scrollwheel tick
-    mask[t] = isScrollTick ? 0 : 1;
-  }
-  return buildSegmentsWithMinGap(mask, 1);
-}
+
 
 function getPlotScale(lineKey: LineKey) {
   if (lineKey === "mouseX") {
@@ -841,15 +825,7 @@ export function App() {
       : [];
   }, [dataset, totalFrames]);
 
-  const jumpHoldSegments = useMemo(() => {
-    return dataset
-      ? computeJumpHoldSegments(
-          totalFrames,
-          dataset.sparse.commands,
-          dataset.dense.buttons
-        )
-      : [];
-  }, [dataset, totalFrames]);
+
 
   const visibleWidth = scrollContainerRef.current?.clientWidth ?? (typeof window !== "undefined" ? window.innerWidth - 80 : 1800);
   const maxScroll = Math.max(1, totalFrames - visibleWidth);
@@ -1374,31 +1350,18 @@ export function App() {
                             );
                           })}
 
-                        {lane.key === "jump" && (
-                          <>
-                            {jumpHoldSegments.map((seg, sidx) => (
-                              <rect
-                                key={`jmph-${sidx}`}
-                                x={seg.start}
-                                y={top}
-                                width={Math.max(1, seg.end - seg.start + 1)}
-                                height={h}
-                                fill="#555555"
-                              />
-                            ))}
-                            {jumpCommandLines.map((cmd, cidx) => (
-                              <rect
-                                key={`jmpc-${cidx}`}
-                                x={cmd.frame}
-                                y={top + cmd.yOffset}
-                                width={1}
-                                height={cmd.h}
-                                fill={cmd.color}
-                                shapeRendering="crispEdges"
-                              />
-                            ))}
-                          </>
-                        )}
+                        {lane.key === "jump" &&
+                          jumpCommandLines.map((cmd, cidx) => (
+                            <rect
+                              key={`jmpc-${cidx}`}
+                              x={cmd.frame}
+                              y={top + cmd.yOffset}
+                              width={1}
+                              height={cmd.h}
+                              fill={cmd.color}
+                              shapeRendering="crispEdges"
+                            />
+                          ))}
 
                         {lane.key === "ground" &&
                           groundSegments.map((seg, sidx) => (
