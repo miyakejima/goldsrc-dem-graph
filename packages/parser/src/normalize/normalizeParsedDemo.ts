@@ -177,7 +177,10 @@ export function normalizeParsedDemo(params: {
   const commandsByFrame: Record<string, string> = {};
   for (const frame of params.raw.frames) {
     if (frame.frameType === 3 && frame.clientCommand) {
-      commandsByFrame[String(frame.frameNumber)] = frame.clientCommand;
+      const key = String(frame.frameNumber);
+      commandsByFrame[key] = commandsByFrame[key]
+        ? `${commandsByFrame[key]}; ${frame.clientCommand}`
+        : frame.clientCommand;
     }
   }
 

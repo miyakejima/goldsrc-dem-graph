@@ -191,41 +191,54 @@ function computeJumpCommandLines(
   for (let t = 1; t <= totalFrames; t++) {
     const cmdStr = commands[String(t)];
     if (!cmdStr) continue;
-    const a = cmdStr.toLowerCase().split(";").map((s) => s.trim());
+    const a = cmdStr.toLowerCase().split(";").map((s) => s.trim()).filter(Boolean);
     const nextCmdStr = commands[String(t + 1)];
-    const s = nextCmdStr ? nextCmdStr.toLowerCase().split(";").map((str) => str.trim()) : [];
-    const r = a.indexOf("+jump");
-    const n = a.indexOf("-jump");
-    if (r === -1 && n === -1) continue;
+    const s = nextCmdStr ? nextCmdStr.toLowerCase().split(";").map((str) => str.trim()).filter(Boolean) : [];
+    const pressedIndex = a.indexOf("+jump");
+    const releasedIndex = a.indexOf("-jump");
+    if (pressedIndex === -1 && releasedIndex === -1) continue;
 
-    let i: number | undefined;
-    if (n !== -1 && r !== -1) {
-      if (n > r) {
-        i = (1315 === (f2[t + 1] ?? 0)) ? 65280 : 34816;
+    let color: number | undefined;
+    if (releasedIndex !== -1 && pressedIndex !== -1) {
+      if (releasedIndex > pressedIndex) {
+        color = (f2[t + 1] === 1315) ? 0x00FF00 : 0x008800;
+      } else if (s.indexOf("-jump") !== -1 && s.indexOf("+jump") === -1) {
+        color = 0xFF00FF;
       } else {
-        i = (s.indexOf("-jump") !== -1 && s.indexOf("+jump") === -1) ? 16711935 : 65535;
+        color = 0x00FFFF;
       }
-    } else if (r !== -1) {
-      i = 16711680;
-    } else if (n !== -1) {
-      i = 255;
+    } else if (pressedIndex !== -1) {
+      color = 0xFF0000;
+    } else if (releasedIndex !== -1) {
+      color = 0x0000FF;
     }
 
-    if (r !== -1 && !((btns[t + 1] ?? 0) & 2)) {
-      i = 16777215;
+    if (pressedIndex !== -1 && !((btns[t + 1] ?? 0) & 2)) {
+      color = 0xFFFFFF;
     }
-    if (1315 === (f2[t + 1] ?? 0) && ((btns[t] ?? 0) & 2)) {
-      i = 16755200;
+    if (f2[t + 1] === 1315 && ((btns[t] ?? 0) & 2)) {
+      color = 0xFFAA00;
     }
-    if (a.indexOf("+jump", r + 1) !== -1 && a.indexOf("-jump", n + 1) !== -1) {
-      i = 16711935;
+    if (a.indexOf("+jump", pressedIndex + 1) !== -1 && a.indexOf("-jump", releasedIndex + 1) !== -1) {
+      color = 0xFF00FF;
     }
 
-    if (i !== undefined) {
-      const isSpecial = [65280, 34816, 16711680, 255].indexOf(i) === -1;
+    // Upstream Unique-KZ fallback: non-canonical / isolated command lines resolve to
+    // jumpoff (#00FF00) or air scroll (#008800) if pulse, or are discarded.
+    if (color !== undefined && [0xFFFFFF, 0xFF0000, 0x0000FF, 0x00FFFF, 0xFF00FF].indexOf(color) !== -1) {
+      const isPulse = ((btns[t] ?? 0) & 2) !== 0 && ((btns[t + 1] ?? 0) & 2) === 0;
+      if (isPulse) {
+        color = (f2[t + 1] === 1315) ? 0x00FF00 : 0x008800;
+      } else {
+        continue;
+      }
+    }
+
+    if (color !== undefined) {
+      const isSpecial = [0x00FF00, 0x008800, 0xFFAA00].indexOf(color) === -1;
       lines.push({
         frame: t,
-        color: `#${i.toString(16).padStart(6, "0")}`,
+        color: `#${color.toString(16).padStart(6, "0")}`,
         yOffset: isSpecial ? 2.5 : 0,
         h: isSpecial ? 17 : 22
       });
@@ -249,8 +262,9 @@ function computeJumpHoldSegments(
       continue;
     }
     const c = (cmds[String(t)] || "").toLowerCase();
-    const hasJumpCmd = c.includes("+jump") || c.includes("-jump");
-    mask[t] = hasJumpCmd ? 0 : 1;
+    const isScrollTick = c.includes("+jump") && c.includes("-jump");
+    // Only hold spacebar if the button is held and it is NOT a scrollwheel tick
+    mask[t] = isScrollTick ? 0 : 1;
   }
   return buildSegmentsWithMinGap(mask, 1);
 }

@@ -165,8 +165,16 @@ function detectJumps(input: AnalyticsInput): JumpMetrics[] {
     const fog = framesOnGroundCounter;
     framesOnGroundCounter = 0; // reset for next air session
     const takeoffIndex = index;
-    let landingIndex = -1;
 
+    // 1. Must have jump button pressed near takeoff (prevents walking off ledges / falling)
+    const windowStart = Math.max(0, takeoffIndex - 3);
+    const jumped = frames.slice(windowStart, takeoffIndex + 1).some((f) => (f.cmd.buttons & IN_JUMP) !== 0);
+    if (!jumped) {
+      index += 1;
+      continue;
+    }
+
+    let landingIndex = -1;
     for (let cursor = takeoffIndex + 1; cursor < frames.length; cursor += 1) {
       const isGrounded = frames[cursor].onground !== 0 && frames[cursor].onground !== false;
       if (isGrounded) {
@@ -180,15 +188,15 @@ function detectJumps(input: AnalyticsInput): JumpMetrics[] {
     }
 
     const airFrames = frames.slice(takeoffIndex, landingIndex);
-    if (airFrames.length < 8) {
+    const airCount = airFrames.length;
+
+    // 2. Physical airtime envelope under GoldSrc gravity 800:
+    // A flat jump is ~52..74 frames. A highjump is ~38..65 frames.
+    // Anything < 38 frames (micro-hop) or > 76 frames (drop/fall/ladder) is outside jump physics.
+    if (airCount < 38 || airCount > 76) {
       index = landingIndex + 1;
       continue;
     }
-
-    // Prestrafe: max speed in pre-takeoff window
-    const preWindowStart = Math.max(0, takeoffIndex - 12);
-    const preWindow = frames.slice(preWindowStart, takeoffIndex);
-    const prestrafeVal = preWindow.reduce((max, f) => Math.max(max, speed2d(f)), speed2d(previous));
 
     const takeoff = frames[takeoffIndex];
     const landing = frames[landingIndex];
@@ -202,16 +210,58 @@ function detectJumps(input: AnalyticsInput): JumpMetrics[] {
 
     // Standard GoldSrc KZ 2D jump distance includes 32.0 bounding box width
     const distanceXyVal = Math.sqrt(dx * dx + dy * dy) + 32.0;
-
-    // Vertical height adjustment
     const distanceVal = groundElevationDelta !== 0 ? Math.sqrt(distanceXyVal * distanceXyVal + groundElevationDelta * groundElevationDelta) : distanceXyVal;
 
-    // Filter out micro hops or falls
-    if (distanceXyVal < 140.0 && airFrames.length < 30) {
+    // 3. Check for pre-takeoff duck taps within ground window (Countjump detection)
+    let duckTaps = 0;
+    if (fog > 3) {
+      const cjWindowStart = Math.max(0, takeoffIndex - Math.min(fog, 25));
+      const preGroundFrames = frames.slice(cjWindowStart, takeoffIndex);
+      for (let k = 1; k < preGroundFrames.length; k += 1) {
+        const wasDuck = (preGroundFrames[k - 1].cmd.buttons & IN_DUCK) !== 0;
+        const isDk = (preGroundFrames[k].cmd.buttons & IN_DUCK) !== 0;
+        if (!wasDuck && isDk) duckTaps += 1;
+      }
+    }
+
+    // 4. Technique Classification & Ground Elevation Gates:
+    // Flat ground: abs(groundElevationDelta) < 8.0 units (tolerance for duck/standing collision penetration)
+    // Highjump: landing is HIGHER than takeoff (+8.0 to +70.0 units)
+    // Drops / falling off platforms: groundElevationDelta < -8.0 (rejected for non-bhop)
+    const isBhop = fog <= 3;
+    const isFlat = Math.abs(groundElevationDelta) < 8.0;
+    const isHigh = !isBhop && duckTaps === 0 && groundElevationDelta >= 8.0 && groundElevationDelta <= 70.0;
+
+    let typeVal = 0; // Longjump (default flat)
+    let maxAllowedDist = 265.0; // Server validator cap for flat Longjump
+
+    if (isBhop) {
+      typeVal = 2; // Bhop / Standup Bhop
+      maxAllowedDist = 275.0;
+    } else if (duckTaps > 0 && (isFlat || groundElevationDelta > 0)) {
+      typeVal = 4; // Countjump (CJ / DCJ)
+      maxAllowedDist = duckTaps > 1 ? 285.0 : 280.0;
+    } else if (isHigh) {
+      typeVal = 1; // Highjump (landing higher)
+      maxAllowedDist = 255.0;
+    } else if (!isFlat) {
+      // Falling to a lower platform / drop: not an accredited jump technique
       index = landingIndex + 1;
       continue;
     }
 
+    // 5. Enforce Distance Envelope:
+    // Minimum 170.0 units (standard uq_jumpstats threshold)
+    // Maximum maxAllowedDist (prevents impossible jumps from physics glitches/falls)
+    if (distanceXyVal < 170.0 || distanceXyVal > maxAllowedDist) {
+      index = landingIndex + 1;
+      continue;
+    }
+
+    // Prestrafe: max speed in pre-takeoff window
+    const preWindowStart = Math.max(0, takeoffIndex - 12);
+    const preWindow = frames.slice(preWindowStart, takeoffIndex);
+    const prestrafeVal = preWindow.reduce((max, f) => Math.max(max, speed2d(f)), speed2d(previous));
     const maxspeedVal = airFrames.reduce((max, f) => Math.max(max, speed2d(f)), 0);
 
     // Sync calculation
@@ -222,7 +272,6 @@ function detectJumps(input: AnalyticsInput): JumpMetrics[] {
       const btn = airFrames[cursor].cmd.buttons;
       const dYaw = airFrames[cursor].viewangles[1] - airFrames[cursor - 1].viewangles[1];
 
-      // Turning right with +moveright OR turning left with +moveleft
       const keyRight = (btn & IN_MOVERIGHT) !== 0;
       const keyLeft = (btn & IN_MOVELEFT) !== 0;
       const yawTurningRight = dYaw > 0;
@@ -235,16 +284,8 @@ function detectJumps(input: AnalyticsInput): JumpMetrics[] {
     const strafeMetrics = buildStrafeMetrics(airFrames);
     const syncPct = airFrames.length > 0 ? (syncAcc / airFrames.length) * 100 : 0;
 
-    // Jump classification:
-    // Type 2 = Bhop / Standup Bhop (FOG <= 3)
-    // Type 1 = Highjump (landing block significantly lower by >= 10.0 units)
-    // Type 0 = Longjump (flat ground surface)
-    const isBhop = fog <= 3;
-    const isHighJump = !isBhop && groundElevationDelta <= -10.0;
-    const typeVal = isBhop ? 2 : (isHighJump ? 1 : 0);
-    const isStandup = isBhop ? (takeoff.cmd.buttons & IN_DUCK) === 0 : null;
+    const isStandup = (typeVal === 2 || typeVal === 4) ? (takeoff.cmd.buttons & IN_DUCK) === 0 : null;
     const isIdealBhop = isBhop ? fog <= 2 : null;
-
     const framesInDuck = airFrames.filter((f) => (f.cmd.buttons & IN_DUCK) !== 0 || ((f.flags ?? 0) & FL_DUCKING) !== 0).length;
 
     jumps.push({
@@ -264,7 +305,7 @@ function detectJumps(input: AnalyticsInput): JumpMetrics[] {
       frames: airFrames.length,
       framesInDuck,
       framesOnGround: isBhop ? fog : null,
-      doubleDucks: null,
+      doubleDucks: duckTaps > 0 ? duckTaps : null,
       preJumpVelocityJumpoff: isBhop ? toFixedString(speed2d(takeoff)) : null,
       preJumpVelocityBeforeJumpoff: null,
       isIdealBhop,

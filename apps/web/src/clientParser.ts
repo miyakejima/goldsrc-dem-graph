@@ -138,6 +138,16 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
     return 0;
   });
 
+  const fuser2 = new Array<number>(totalFrames).fill(0);
+  for (let f = 0; f < totalFrames - 1; f++) {
+    const prevGround = frames[f].onground !== 0;
+    const nextGround = frames[f + 1].onground !== 0;
+    const hasJump = (frames[f].cmd.buttons & (1 << 1)) !== 0 || (frames[f + 1].cmd.buttons & (1 << 1)) !== 0;
+    if (prevGround && !nextGround && hasJump) {
+      fuser2[f + 1] = 1315;
+    }
+  }
+
   const forwardLane = buttons.map((b) => ((b & (1 << 3)) !== 0 ? 1 : 0));
   const backLane = buttons.map((b) => ((b & (1 << 4)) !== 0 ? 1 : 0));
   const moveleftLane = buttons.map((b) => ((b & (1 << 9)) !== 0 ? 1 : 0));
@@ -238,7 +248,7 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
       sidemove: frames.map((f) => f.cmd.sidemove),
       upmove: frames.map((f) => f.cmd.upmove),
       maxspeed: frames.map(() => normalized.cvars.sv_maxspeed ?? 250),
-      fuser2: frames.map(() => 0),
+      fuser2,
       weapon: frames.map(() => "n/a")
     },
     lanes: {
