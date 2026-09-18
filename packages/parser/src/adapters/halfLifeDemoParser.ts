@@ -285,6 +285,7 @@ function parseGameDataFrameData(
         punchangle: [null, null, null],
         simvel: [null, null, null],
         simorg: [null, null, null],
+        viewheight: [null, null, null],
         health: null,
         maxclients: null,
         viewentity: null,
@@ -351,6 +352,7 @@ function parseGameDataFrameData(
       punchangle: [readFloatAt(payload, 164), readFloatAt(payload, 168), readFloatAt(payload, 172)],
       simvel: [readFloatAt(payload, 92), readFloatAt(payload, 96), readFloatAt(payload, 100)],
       simorg: [readFloatAt(payload, 104), readFloatAt(payload, 108), readFloatAt(payload, 112)],
+      viewheight: [readFloatAt(payload, 116), readFloatAt(payload, 120), readFloatAt(payload, 124)],
       health: readUIntAt(payload, 144),
       maxclients: readUIntAt(payload, 176),
       viewentity: readUIntAt(payload, 180),
@@ -446,6 +448,7 @@ function parseSegmentFrames(reader: Reader, entry: RawDirectoryEntry, warnings: 
           punchangle: [null, null, null],
           simvel: [null, null, null],
           simorg: [null, null, null],
+          viewheight: [null, null, null],
           health: null,
           maxclients: null,
           viewentity: null,
@@ -494,6 +497,7 @@ function parseSegmentFrames(reader: Reader, entry: RawDirectoryEntry, warnings: 
           punchangle: [null, null, null],
           simvel: [null, null, null],
           simorg: [null, null, null],
+          viewheight: [null, null, null],
           health: null,
           maxclients: null,
           viewentity: null,
@@ -532,7 +536,8 @@ function parseSegmentFrames(reader: Reader, entry: RawDirectoryEntry, warnings: 
     }
 
     if (frameType === 6) {
-      reader.skip(80);
+      // EventData: flags(4) + index(4) + delay(4) + EventArgs(72) = 84 bytes
+      reader.skip(84);
       continue;
     }
 

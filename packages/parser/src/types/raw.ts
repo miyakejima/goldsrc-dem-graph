@@ -33,6 +33,7 @@ export interface RawFrame {
     punchangle: [number | null, number | null, number | null];
     simvel: [number | null, number | null, number | null];
     simorg: [number | null, number | null, number | null];
+    viewheight: [number | null, number | null, number | null];
     health: number | null;
     maxclients: number | null;
     viewentity: number | null;

@@ -110,6 +110,7 @@ export interface GraphViewerJump {
   strafes: number;
   sync: number;
   color: string;
+  fullName?: string;
   distanceXy?: number;
   isStandup?: boolean;
   isIdealBhop?: boolean;
@@ -130,6 +131,10 @@ export interface GraphViewerDataset {
     frames: number;
     startFrame?: number;
     stopFrame?: number;
+    timer?: {
+      startFrame: number;
+      stopFrame: number;
+    };
   };
   dense: {
     frame: number[];
@@ -172,6 +177,8 @@ export interface GraphViewerDataset {
     ground: number[];
     duck: number[];
     duckstate: number[];
+    use?: number[];
+    freezetime?: number[];
     forward: number[];
     back: number[];
     moveleft: number[];

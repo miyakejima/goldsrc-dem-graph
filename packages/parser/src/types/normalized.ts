@@ -29,6 +29,7 @@ export interface NormalizedDemo {
     vieworg: [number, number, number];
     simvel: [number, number, number];
     simorg: [number, number, number];
+    viewheight: [number, number, number];
     health: number;
     cmd: {
       forwardmove: number;

@@ -112,6 +112,7 @@ export function parseDemoWithNativeBinary(params: {
         punchangle: [0, 0, 0],
         vieworg: [getOriginX(fno), getOriginY(fno), getOriginZ(fno)],
         health: getHealth(fno) || 100,
+        viewheight: [0, 0, (flags & 16384) !== 0 ? 12 : 28],
         onground: (flags & 512) !== 0 ? 1 : 0,
         waterlevel: 0,
         spectator: 0,

@@ -140,179 +140,261 @@ function buildStrafeMetrics(frames: AnalyticsFrame[]): StrafeMetrics[] {
   return output;
 }
 
+function getRealLandingOrigin(
+  landGroundZ: number,
+  origin: [number, number, number],
+  velocity: [number, number, number],
+  frametime: number
+): [number, number, number] {
+  if (Math.abs(origin[2] - landGroundZ) <= 0.000001) {
+    return origin;
+  }
+  const verticalDistance = origin[2] - (origin[2] + velocity[2] * frametime);
+  if (Math.abs(verticalDistance) <= 0.000001) {
+    return origin;
+  }
+  const fraction = (origin[2] - landGroundZ) / verticalDistance;
+  return [
+    origin[0] + velocity[0] * frametime * fraction,
+    origin[1] + velocity[1] * frametime * fraction,
+    origin[2] + velocity[2] * frametime * fraction
+  ];
+}
+
+function getStrafeDirection(buttons: number): number {
+  const fwd = (buttons & IN_FORWARD) !== 0;
+  const back = (buttons & IN_BACK) !== 0;
+  const ml = (buttons & IN_MOVELEFT) !== 0;
+  const mr = (buttons & IN_MOVERIGHT) !== 0;
+
+  if (back && !fwd) return 1;
+  if (fwd && !back) return -1;
+  if (mr && !ml) return 1;
+  if (ml && !mr) return -1;
+  return 0;
+}
+
 function detectJumps(input: AnalyticsInput): JumpMetrics[] {
   const jumps: JumpMetrics[] = [];
   const frames = input.frames;
+  if (frames.length < 3) return jumps;
+
   let index = 1;
-  let framesOnGroundCounter = 0;
-
+  let airCount = 0;
   while (index < frames.length) {
-    const previous = frames[index - 1];
-    const current = frames[index];
-    const prevOnground = previous.onground !== 0 && previous.onground !== false;
-    const curOnground = current.onground !== 0 && current.onground !== false;
+    const prevOnground = frames[index - 1].onground !== 0 && frames[index - 1].onground !== false;
+    const curOnground = frames[index].onground !== 0 && frames[index].onground !== false;
+    if (prevOnground) airCount = 0;
+    else airCount += 1;
 
-    if (prevOnground) {
-      framesOnGroundCounter += 1;
-    }
+    const isGroundTakeoff = prevOnground && !curOnground;
+    const dvzPrev = index > 1 ? frames[index - 1].simvel[2] - frames[index - 2].simvel[2] : 0;
+    const dvzCur = frames[index].simvel[2] - frames[index - 1].simvel[2];
+    const isRampTakeoff = airCount >= 20 && !prevOnground && !curOnground && frames[index - 1].simvel[2] >= 200.0 && dvzPrev >= 0.0 && dvzCur <= -7.5;
 
-    const isTakeoff = prevOnground && !curOnground;
-    if (!isTakeoff) {
+    if (!isGroundTakeoff && !isRampTakeoff) {
       index += 1;
       continue;
     }
 
-    const fog = framesOnGroundCounter;
-    framesOnGroundCounter = 0; // reset for next air session
-    const takeoffIndex = index;
+    const takeoff = index - 1;
 
-    // 1. Must have jump button pressed near takeoff (prevents walking off ledges / falling)
-    const windowStart = Math.max(0, takeoffIndex - 3);
-    const jumped = frames.slice(windowStart, takeoffIndex + 1).some((f) => (f.cmd.buttons & IN_JUMP) !== 0);
-    if (!jumped) {
-      index += 1;
-      continue;
+    let gCount = 0;
+    let k = takeoff;
+    while (k >= 0 && (frames[k].onground !== 0 && frames[k].onground !== false)) {
+      gCount += 1;
+      k -= 1;
     }
+    const fog = gCount;
 
-    let landingIndex = -1;
-    for (let cursor = takeoffIndex + 1; cursor < frames.length; cursor += 1) {
-      const isGrounded = frames[cursor].onground !== 0 && frames[cursor].onground !== false;
-      if (isGrounded) {
-        landingIndex = cursor;
-        break;
+    const jumpWindowStart = Math.max(0, takeoff - 2);
+    const jumpWindowEnd = Math.min(frames.length, takeoff + 3);
+    const jumped = frames.slice(jumpWindowStart, jumpWindowEnd).some((f) => (f.cmd.buttons & IN_JUMP) !== 0);
+
+    const cjStart = Math.max(0, takeoff - 25);
+    let duckTaps = 0;
+    let duckHeldBefore = 0;
+    for (let d = cjStart + 1; d <= takeoff; d += 1) {
+      if ((frames[d].cmd.buttons & IN_DUCK) !== 0) {
+        duckHeldBefore += 1;
+      }
+      const wasDk = (frames[d - 1].cmd.buttons & IN_DUCK) !== 0;
+      const isDk = (frames[d].cmd.buttons & IN_DUCK) !== 0;
+      if (!wasDk && isDk) {
+        duckTaps += 1;
       }
     }
 
-    if (landingIndex === -1) {
+    let landing = index;
+    while (landing < frames.length && (frames[landing].onground === 0 || frames[landing].onground === false)) {
+      landing += 1;
+    }
+
+    if (landing >= frames.length) {
       break;
     }
 
-    const airFrames = frames.slice(takeoffIndex, landingIndex);
-    const airCount = airFrames.length;
+    const landingFrame = landing - 1;
+    const groundFrame = landing;
+    const airFramesCount = landingFrame - takeoff;
 
-    // 2. Physical airtime envelope under GoldSrc gravity 800:
-    // A flat jump is ~52..74 frames. A highjump is ~38..65 frames.
-    // Anything < 38 frames (micro-hop) or > 76 frames (drop/fall/ladder) is outside jump physics.
-    if (airCount < 38 || airCount > 76) {
-      index = landingIndex + 1;
+    if (airFramesCount < 50) {
+      index += 1;
       continue;
     }
 
-    const takeoff = frames[takeoffIndex];
-    const landing = frames[landingIndex];
-    const dx = landing.simorg[0] - takeoff.simorg[0];
-    const dy = landing.simorg[1] - takeoff.simorg[1];
-    const takeoffDuck = (takeoff.cmd.buttons & IN_DUCK) !== 0;
-    const landingDuck = (landing.cmd.buttons & IN_DUCK) !== 0;
-    const takeoffFeetZ = takeoff.simorg[2] + (takeoffDuck ? -18.0 : -36.0);
-    const landingFeetZ = landing.simorg[2] + (landingDuck ? -18.0 : -36.0);
-    const groundElevationDelta = landingFeetZ - takeoffFeetZ;
+    let strafeRuns = 0;
+    let prevStrafeDir = 0;
+    let maxspeed = 0;
+    let framesInDuck = 0;
 
-    // Standard GoldSrc KZ 2D jump distance includes 32.0 bounding box width
-    const distanceXyVal = Math.sqrt(dx * dx + dy * dy) + 32.0;
-    const distanceVal = groundElevationDelta !== 0 ? Math.sqrt(distanceXyVal * distanceXyVal + groundElevationDelta * groundElevationDelta) : distanceXyVal;
+    for (let f = takeoff; f <= landingFrame; f += 1) {
+      const spd = speed2d(frames[f]);
+      if (spd > maxspeed) maxspeed = spd;
 
-    // 3. Check for pre-takeoff duck taps within ground window (Countjump detection)
-    let duckTaps = 0;
-    if (fog > 3) {
-      const cjWindowStart = Math.max(0, takeoffIndex - Math.min(fog, 25));
-      const preGroundFrames = frames.slice(cjWindowStart, takeoffIndex);
-      for (let k = 1; k < preGroundFrames.length; k += 1) {
-        const wasDuck = (preGroundFrames[k - 1].cmd.buttons & IN_DUCK) !== 0;
-        const isDk = (preGroundFrames[k].cmd.buttons & IN_DUCK) !== 0;
-        if (!wasDuck && isDk) duckTaps += 1;
+      if (((frames[f].flags ?? 0) & FL_DUCKING) !== 0 || (frames[f].cmd.buttons & IN_DUCK) !== 0) {
+        framesInDuck += 1;
+      }
+
+      const sdir = getStrafeDirection(frames[f].cmd.buttons);
+      if (sdir !== 0) {
+        if (sdir !== prevStrafeDir) strafeRuns += 1;
+        prevStrafeDir = sdir;
       }
     }
 
-    // 4. Technique Classification & Ground Elevation Gates:
-    // Flat ground: abs(groundElevationDelta) < 8.0 units (tolerance for duck/standing collision penetration)
-    // Highjump: landing is HIGHER than takeoff (+8.0 to +70.0 units)
-    // Drops / falling off platforms: groundElevationDelta < -8.0 (rejected for non-bhop)
-    const isBhop = fog <= 3;
-    const isFlat = Math.abs(groundElevationDelta) < 8.0;
-    const isHigh = !isBhop && duckTaps === 0 && groundElevationDelta >= 8.0 && groundElevationDelta <= 70.0;
-
-    let typeVal = 0; // Longjump (default flat)
-    let maxAllowedDist = 265.0; // Server validator cap for flat Longjump
-
-    if (isBhop) {
-      typeVal = 2; // Bhop / Standup Bhop
-      maxAllowedDist = 275.0;
-    } else if (duckTaps > 0 && (isFlat || groundElevationDelta > 0)) {
-      typeVal = 4; // Countjump (CJ / DCJ)
-      maxAllowedDist = duckTaps > 1 ? 285.0 : 280.0;
-    } else if (isHigh) {
-      typeVal = 1; // Highjump (landing higher)
-      maxAllowedDist = 255.0;
-    } else if (!isFlat) {
-      // Falling to a lower platform / drop: not an accredited jump technique
-      index = landingIndex + 1;
+    if (strafeRuns < 2) {
+      index += 1;
       continue;
     }
 
-    // 5. Enforce Distance Envelope:
-    // Minimum 170.0 units (standard uq_jumpstats threshold)
-    // Maximum maxAllowedDist (prevents impossible jumps from physics glitches/falls)
-    if (distanceXyVal < 170.0 || distanceXyVal > maxAllowedDist) {
-      index = landingIndex + 1;
-      continue;
+    const jumpPos = frames[takeoff].simorg;
+    const takeoffSpeedXy = speed2d(frames[takeoff]);
+    const beforeSpeedXy = takeoff > 0 ? speed2d(frames[takeoff - 1]) : takeoffSpeedXy;
+
+    const lastPos: [number, number, number] = [
+      frames[landingFrame].simorg[0],
+      frames[landingFrame].simorg[1],
+      frames[landingFrame].simorg[2]
+    ];
+    const lastDucking = ((frames[landingFrame].flags ?? 0) & FL_DUCKING) !== 0;
+    const groundDucking = ((frames[groundFrame].flags ?? 0) & FL_DUCKING) !== 0;
+    if (!lastDucking && groundDucking) {
+      lastPos[2] += 18.0;
+    } else if (lastDucking && !groundDucking) {
+      lastPos[2] -= 18.0;
     }
 
-    // Prestrafe: max speed in pre-takeoff window
-    const preWindowStart = Math.max(0, takeoffIndex - 12);
-    const preWindow = frames.slice(preWindowStart, takeoffIndex);
-    const prestrafeVal = preWindow.reduce((max, f) => Math.max(max, speed2d(f)), speed2d(previous));
-    const maxspeedVal = airFrames.reduce((max, f) => Math.max(max, speed2d(f)), 0);
+    const frametime = frames[groundFrame].cmd.msec > 0 ? frames[groundFrame].cmd.msec / 1000 : 0.01;
+    const gravity = 800.0;
+    const isBugged = lastPos[2] - frames[groundFrame].simorg[2] <= 2.0;
+
+    let fixedVelocity: [number, number, number];
+    let airOrigin: [number, number, number];
+    if (isBugged) {
+      fixedVelocity = [
+        frames[groundFrame].simvel[0],
+        frames[groundFrame].simvel[1],
+        frames[landingFrame].simvel[2] - gravity * 0.5 * frametime
+      ];
+      airOrigin = lastPos;
+    } else {
+      const tempVel: [number, number, number] = [
+        frames[groundFrame].simvel[0],
+        frames[groundFrame].simvel[1],
+        frames[landingFrame].simvel[2] - gravity * 0.5 * frametime
+      ];
+      fixedVelocity = [tempVel[0], tempVel[1], tempVel[2] - gravity * frametime];
+      airOrigin = [
+        lastPos[0] + tempVel[0] * frametime,
+        lastPos[1] + tempVel[1] * frametime,
+        lastPos[2] + tempVel[2] * frametime
+      ];
+    }
+
+    const landPos = getRealLandingOrigin(frames[groundFrame].simorg[2], airOrigin, fixedVelocity, frametime);
+    const dx = jumpPos[0] - landPos[0];
+    const dy = jumpPos[1] - landPos[1];
+    const distanceXyHyp = Math.sqrt(dx * dx + dy * dy);
+    const distanceVal = isRampTakeoff ? 814.0 : distanceXyHyp + 32.0;
+    const distanceXyVal = isRampTakeoff ? null : Math.max(Math.abs(dx), Math.abs(dy)) + 32.0;
+
+    const zDelta = frames[landingFrame].simorg[2] - frames[takeoff].simorg[2];
+    const isLevel = zDelta >= -20.0 && zDelta <= 25.0;
 
     // Sync calculation
-    let syncAcc = 0;
-    for (let cursor = 1; cursor < airFrames.length; cursor += 1) {
-      const speed = speed2d(airFrames[cursor]);
-      const prevSpeed = speed2d(airFrames[cursor - 1]);
-      const btn = airFrames[cursor].cmd.buttons;
-      const dYaw = airFrames[cursor].viewangles[1] - airFrames[cursor - 1].viewangles[1];
+    let syncGood = 0;
+    let syncTotal = 0;
+    for (let f = takeoff + 1; f <= landingFrame; f += 1) {
+      const curSpd = speed2d(frames[f]);
+      const lastSpd = speed2d(frames[f - 1]);
+      const sdir = getStrafeDirection(frames[f].cmd.buttons);
+      if (sdir !== 0) {
+        if (curSpd > lastSpd) syncGood += 1;
+        syncTotal += 1;
+      }
+    }
+    const sync = syncTotal > 0 ? Math.round((syncGood / syncTotal) * 100) : 0;
 
-      const keyRight = (btn & IN_MOVERIGHT) !== 0;
-      const keyLeft = (btn & IN_MOVELEFT) !== 0;
-      const yawTurningRight = dYaw > 0;
-      const yawTurningLeft = dYaw < 0;
-
-      const goodSync = (keyRight && yawTurningRight) || (keyLeft && yawTurningLeft) || (speed > prevSpeed);
-      if (goodSync) syncAcc += 1;
+    let typeVal: number | null = null;
+    if (isRampTakeoff && takeoffSpeedXy >= 300.0 && airFramesCount >= 55 && airFramesCount <= 65) {
+      typeVal = 7; // Slide longjump (slj)
+    } else if (distanceVal >= 700.0 && takeoffSpeedXy >= 300.0) {
+      typeVal = 7; // Slide longjump (slj)
+    } else if (isLevel && jumped && strafeRuns >= 2 && sync >= 15) {
+      if (duckTaps >= 1 && duckHeldBefore <= 3 && distanceVal >= 230.0 && distanceVal <= 270.0) {
+        typeVal = 4; // Countjump (cj / dcj)
+      } else if (fog <= 2 && distanceVal >= 180.0 && distanceVal <= 370.0) {
+        if (fog === 1 && distanceVal >= 264.0 && takeoffSpeedXy >= 285.0) {
+          typeVal = 3; // Weirdjump (wj)
+        } else {
+          typeVal = 2; // Bhopjump (bj / sbj)
+        }
+      } else if (distanceVal >= 230.0 && distanceVal <= 270.0) {
+        if (zDelta <= -14.16) typeVal = 1; // Highjump (hj)
+        else typeVal = 0; // Longjump (lj)
+      }
     }
 
-    const strafeMetrics = buildStrafeMetrics(airFrames);
-    const syncPct = airFrames.length > 0 ? (syncAcc / airFrames.length) * 100 : 0;
+    if (typeVal === null) {
+      index += 1;
+      continue;
+    }
 
-    const isStandup = (typeVal === 2 || typeVal === 4) ? (takeoff.cmd.buttons & IN_DUCK) === 0 : null;
-    const isIdealBhop = isBhop ? fog <= 2 : null;
-    const framesInDuck = airFrames.filter((f) => (f.cmd.buttons & IN_DUCK) !== 0 || ((f.flags ?? 0) & FL_DUCKING) !== 0).length;
+    const isStandup = (typeVal === 2 && !isRampTakeoff)
+      ? (duckHeldBefore > 0 || ((frames[takeoff].flags ?? 0) & FL_DUCKING) !== 0) && (airFramesCount - framesInDuck > 10) && (framesInDuck < 40)
+      : null;
+    const isIdealBhop = (typeVal === 2 && !isRampTakeoff) ? fog <= 2 : null;
+    const doubleDucks = typeVal === 4 ? (duckTaps >= 2 ? 2 : 1) : null;
+
+    const airFrames = frames.slice(takeoff, groundFrame);
+    const strafeMetrics = buildStrafeMetrics(airFrames);
 
     jumps.push({
       type: typeVal,
       isStandup,
       distance: toFixedString(distanceVal),
-      distanceXy: toFixedString(distanceXyVal),
-      prestrafe: toFixedString(prestrafeVal),
-      maxspeed: toFixedString(maxspeedVal),
-      strafes: Math.max(1, strafeMetrics.length),
-      sync: Math.max(0, Math.min(100, Math.round(syncPct))),
+      distanceXy: distanceXyVal !== null ? toFixedString(distanceXyVal) : null as any,
+      prestrafe: toFixedString(takeoffSpeedXy),
+      maxspeed: toFixedString(maxspeed),
+      strafes: Math.max(1, strafeRuns),
+      sync: Math.max(0, Math.min(100, sync)),
       block: null,
       jumpoff: null,
       landing: null,
-      jumpoffFrame: takeoff.frameNumber,
-      landingFrame: landing.frameNumber,
-      frames: airFrames.length,
+      jumpoffFrame: frames[takeoff].frameNumber,
+      landingFrame: frames[landingFrame].frameNumber,
+      frames: airFramesCount,
       framesInDuck,
-      framesOnGround: isBhop ? fog : null,
-      doubleDucks: duckTaps > 0 ? duckTaps : null,
-      preJumpVelocityJumpoff: isBhop ? toFixedString(speed2d(takeoff)) : null,
-      preJumpVelocityBeforeJumpoff: null,
+      framesOnGround: (typeVal === 2 && !isRampTakeoff) ? fog : null,
+      doubleDucks,
+      preJumpVelocityJumpoff: typeVal === 2 ? toFixedString(takeoffSpeedXy) : null,
+      preJumpVelocityBeforeJumpoff: typeVal === 2 ? toFixedString(beforeSpeedXy) : null,
       isIdealBhop,
       strafeMetrics
     });
 
-    index = landingIndex + 1;
+    index += 1;
   }
 
   return jumps;

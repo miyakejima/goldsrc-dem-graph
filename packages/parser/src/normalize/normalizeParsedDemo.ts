@@ -73,6 +73,11 @@ function frameToNormalized(frame: RawFrame, previousTime: number): {
         coerceNumber(frame.refParams.simorg[1], 0),
         coerceNumber(frame.refParams.simorg[2], 0)
       ],
+      viewheight: [
+        coerceNumber(frame.refParams.viewheight?.[0] ?? null, 0),
+        coerceNumber(frame.refParams.viewheight?.[1] ?? null, 0),
+        coerceNumber(frame.refParams.viewheight?.[2] ?? null, 28)
+      ],
       health: coerceNumber(frame.refParams.health, 0),
       cmd: {
         forwardmove: coerceNumber(frame.cmd.forwardmove, 0),
@@ -137,21 +142,25 @@ export function normalizeParsedDemo(params: {
   }
 
   const longestRun = runs.sort((a, b) => b.length - a.length)[0] ?? [];
-  const framesWithTime: FrameWithCommands[] = [];
-  for (const frame of longestRun) {
-    const previous = framesWithTime[framesWithTime.length - 1];
-    if (!previous) {
-      framesWithTime.push(frame);
-      continue;
-    }
 
-    const frameDelta = frame.frameNumber - previous.frameNumber;
-    const timeDelta = frame.time - previous.time;
-    if (frameDelta < 0 || frameDelta > 256 || timeDelta < -0.25 || timeDelta > 2) {
-      break;
+  const byFrameNumber = new Map<number, FrameWithCommands>();
+  for (const frame of longestRun) {
+    if (frame.frameType === 0 || frame.frameType === 1) {
+      const existing = byFrameNumber.get(frame.frameNumber);
+      if (!existing || frame._pendingCmds) {
+        if (existing?._pendingCmds && !frame._pendingCmds) {
+          frame._pendingCmds = existing._pendingCmds;
+        }
+        byFrameNumber.set(frame.frameNumber, frame);
+      }
+    } else if (!byFrameNumber.has(frame.frameNumber)) {
+      byFrameNumber.set(frame.frameNumber, frame);
     }
-    framesWithTime.push(frame);
   }
+
+  const framesWithTime = Array.from(byFrameNumber.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([, f]) => f);
 
   let previousTime = 0;
   const normalizedFrames: NormalizedDemo["frames"] = [];
@@ -159,7 +168,7 @@ export function normalizeParsedDemo(params: {
 
   for (let i = 0; i < framesWithTime.length; i += 1) {
     const frame = framesWithTime[i];
-    const seqFrameNumber = i + 1;
+    const seqFrameNumber = frame.frameNumber;
     const converted = frameToNormalized(frame, previousTime);
     converted.normalized.frameNumber = seqFrameNumber;
     normalizedFrames.push(converted.normalized);

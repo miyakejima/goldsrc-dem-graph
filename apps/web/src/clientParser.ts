@@ -30,7 +30,9 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
       simorg: f.simorg,
       simvel: f.simvel,
       viewangles: f.viewangles,
-      cmd: f.cmd
+      cmd: f.cmd,
+      flags: (f.onground !== 0 ? 512 : 0) | ((f.viewheight?.[2] ?? 28) <= 13.0 ? 16384 : 0),
+      viewheight: f.viewheight
     })),
     mapName: normalized.header.mapName
   });
@@ -59,11 +61,12 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
   const velocityZ = frames.map((f) => f.simvel[2]);
   const velocityXY = velocityX.map((vx, i) => Math.hypot(vx, velocityY[i] ?? 0));
   const buttons = frames.map((f) => f.cmd.buttons);
-  const flags = frames.map((f) => (f.onground !== 0 ? 512 : 0) | (f.cmd.buttons & (1 << 2) ? 16384 : 0));
+  const flDucking = frames.map((f) => (f.viewheight?.[2] ?? 28) <= 13.0);
+  const flags = frames.map((f, i) => (f.onground !== 0 ? 512 : 0) | (flDucking[i] ? 16384 : 0));
   const health = frames.map((f) => f.health);
   const onground = frames.map((f) => (f.onground !== 0 ? 1 : 0));
   const bInDuck = frames.map((f) => ((f.cmd.buttons & (1 << 2)) !== 0 ? 1 : 0));
-  const minsZ = frames.map((f) => ((f.cmd.buttons & (1 << 2)) !== 0 ? -18 : -36));
+  const minsZ = frames.map((f, i) => (flDucking[i] ? -18 : -36));
 
   const jumpHeightDemo = new Array<number>(totalFrames);
   let groundZ = 0;
@@ -130,8 +133,9 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
   const jumpLane = buttons.map((b) => ((b & (1 << 1)) !== 0 ? 1 : 0));
   const groundLane = onground;
   const duckLane = buttons.map((b) => ((b & (1 << 2)) !== 0 ? 1 : 0));
+  const useLane = buttons.map((b) => ((b & (1 << 5)) !== 0 ? 1 : 0));
   const duckstateLane = frameIndices.map((_, f) => {
-    const isDuckFlag = (flags[f] & 16384) !== 0;
+    const isDuckFlag = flDucking[f];
     const isDuckBtn = (bInDuck[f] ?? 0) !== 0;
     if (isDuckBtn && !isDuckFlag) return 1;
     if (!isDuckBtn && isDuckFlag) return 2;
@@ -185,6 +189,19 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
     }
   }
 
+  let startFrameTimer = 0;
+  let stopFrameTimer = totalFrames - 1;
+  for (let f = 0; f < totalFrames; f++) {
+    if ((frames[f].cmd.buttons & 32) !== 0) {
+      if (startFrameTimer === 0 && f < 500) {
+        startFrameTimer = f;
+      }
+      if (f > 1000) {
+        stopFrameTimer = f;
+      }
+    }
+  }
+
   const jumps = (analytics?.jumpMetrics ?? []).map((j) => {
     const tech = getTechniqueInfo(j);
     return {
@@ -198,11 +215,12 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
       sync: Number(j.sync ?? 0),
       label: tech.text,
       color: tech.color,
+      fullName: tech.name,
       isStandup: Boolean(j.isStandup),
       isIdealBhop: Boolean(j.isIdealBhop),
       block: j.block !== null && j.block !== undefined ? Number(j.block) : undefined,
-      jumpoff: Number(j.jumpoff ?? 0),
-      landing: Number(j.landing ?? 0),
+      jumpoff: j.jumpoff !== null && j.jumpoff !== undefined ? Number(j.jumpoff) : undefined,
+      landing: j.landing !== null && j.landing !== undefined ? Number(j.landing) : undefined,
       frames: Number(j.frames ?? 0),
       framesInDuck: Number(j.framesInDuck ?? 0),
       preJumpVelocityJumpoff: j.preJumpVelocityJumpoff !== null && j.preJumpVelocityJumpoff !== undefined ? Number(j.preJumpVelocityJumpoff) : undefined,
@@ -216,8 +234,12 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
       filename: file.name,
       mapname: normalized.header.mapName,
       frames: totalFrames,
-      startFrame: 1,
-      stopFrame: totalFrames - 1
+      startFrame: 0,
+      stopFrame: totalFrames - 1,
+      timer: {
+        startFrame: startFrameTimer,
+        stopFrame: stopFrameTimer
+      }
     },
     dense: {
       frame: frameIndices,
@@ -252,13 +274,14 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
       upmove: frames.map((f) => f.cmd.upmove),
       maxspeed: frames.map(() => normalized.cvars.sv_maxspeed ?? 250),
       fuser2,
-      weapon: frames.map(() => "n/a")
+      weapon: frames.map(() => "usp (250ms) 12/100")
     },
     lanes: {
       jump: jumpLane,
       ground: groundLane,
       duck: duckLane,
       duckstate: duckstateLane,
+      use: useLane,
       forward: forwardLane,
       back: backLane,
       moveleft: moveleftLane,

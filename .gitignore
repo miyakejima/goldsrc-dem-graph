@@ -46,3 +46,4 @@ re_data/pairs/*
 # Test scripts
 test_both_demos.py
 upload_test.py
+tools/live-unique-kz/

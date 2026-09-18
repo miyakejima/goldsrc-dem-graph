@@ -803,6 +803,7 @@ export function App() {
 
   const groundSegments = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.ground, 2) : [], [dataset]);
   const duckSegments = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.duck, 1) : [], [dataset]);
+  const useSegments = useMemo(() => (dataset && dataset.lanes.use ? buildSegmentsWithMinGap(dataset.lanes.use, 1) : []), [dataset]);
 
   const duckstate1Segments = useMemo(() => {
     if (!dataset) return [];
@@ -1318,6 +1319,21 @@ export function App() {
                         />
 
                         {/* Lane-specific contents */}
+                        {lane.key === "use" && (
+                          <>
+                            {useSegments.map((seg, sidx) => (
+                              <rect
+                                key={`use-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#555555"
+                              />
+                            ))}
+                          </>
+                        )}
+
                         {lane.key === "techniques" &&
                           techniques.map((jump, jidx) => {
                             const w = jump.endFrame - jump.startFrame + 1;
@@ -1590,11 +1606,15 @@ export function App() {
                     <p><span>Strafes:</span><strong>{activeJump.strafes}</strong></p>
                     <p><span>Sync:</span><strong>{formatNum(activeJump.sync, 0)}%</strong></p>
                     <p><span>Frames (duck/air):</span><strong>{activeJump.framesInDuck ?? 0}/{activeJump.frames ?? 0}</strong></p>
-                    {activeJump.block !== undefined && (
+                    {activeJump.block != null && activeJump.block !== 0 && (
                       <p><span>Block:</span><strong>{activeJump.block}</strong></p>
                     )}
-                    <p><span>Jump off:</span><strong>{activeJump.jumpoff !== undefined ? formatNum(activeJump.jumpoff, 3) : activeJump.startFrame}</strong></p>
-                    <p><span>Landing:</span><strong>{activeJump.landing !== undefined ? formatNum(activeJump.landing, 3) : activeJump.endFrame}</strong></p>
+                    {activeJump.jumpoff != null && activeJump.jumpoff !== 0 && (
+                      <p><span>Jump off:</span><strong>{formatNum(activeJump.jumpoff, 3)}</strong></p>
+                    )}
+                    {activeJump.landing != null && activeJump.landing !== 0 && (
+                      <p><span>Landing:</span><strong>{formatNum(activeJump.landing, 3)}</strong></p>
+                    )}
                     <div className="copy-hint">{copiedHint ? "Copied!" : "Click on a bar to copy"}</div>
                   </aside>
                 )}
