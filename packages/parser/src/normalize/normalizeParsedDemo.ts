@@ -207,34 +207,6 @@ export function normalizeParsedDemo(params: {
     sv_rollspeed: 0
   };
 
-  const IN_JUMP = 1 << 1;
-  const IN_DUCK = 1 << 2;
-  const IN_FORWARD = 1 << 3;
-  const IN_BACK = 1 << 4;
-  const IN_MOVELEFT = 1 << 9;
-  const IN_MOVERIGHT = 1 << 10;
-  for (let index = 1; index < normalizedFrames.length; index += 1) {
-    const current = normalizedFrames[index];
-    const previous = normalizedFrames[index - 1];
-    const frameCommands: string[] = [];
-    const transitions: Array<{ bit: number; down: string; up: string }> = [
-      { bit: IN_JUMP, down: "+jump", up: "-jump" },
-      { bit: IN_DUCK, down: "+duck", up: "-duck" },
-      { bit: IN_FORWARD, down: "+forward", up: "-forward" },
-      { bit: IN_BACK, down: "+back", up: "-back" },
-      { bit: IN_MOVELEFT, down: "+moveleft", up: "-moveleft" },
-      { bit: IN_MOVERIGHT, down: "+moveright", up: "-moveright" }
-    ];
-    for (const transition of transitions) {
-      const isDown = (current.cmd.buttons & transition.bit) !== 0;
-      const wasDown = (previous.cmd.buttons & transition.bit) !== 0;
-      if (isDown && !wasDown) frameCommands.push(transition.down);
-      if (!isDown && wasDown) frameCommands.push(transition.up);
-    }
-    if (frameCommands.length > 0 && !commandsByFrame[String(current.frameNumber)]) {
-      commandsByFrame[String(current.frameNumber)] = frameCommands.join("; ");
-    }
-  }
 
   const durationSeconds = normalizedFrames.length > 0
     ? normalizedFrames[normalizedFrames.length - 1].time - normalizedFrames[0].time

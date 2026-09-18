@@ -177,6 +177,23 @@ function buildSegmentsWithMinGap(values: number[], minGap = 1): Segment[] {
   return merged;
 }
 
+function etUpstream(totalFrames: number, predicate: (frame: number) => boolean): Array<{ start: number; end: number }> {
+  let i: number | null = null;
+  const a: Array<{ start: number; end: number }> = [];
+  for (let s = 1; s <= totalFrames; s++) {
+    const r = predicate(s);
+    if (r && null === i) {
+      i = s;
+    } else if (null === i || (r && s !== totalFrames)) {
+      // continue scanning
+    } else {
+      a.push({ start: i, end: r ? s : s - 1 });
+      i = null;
+    }
+  }
+  return a;
+}
+
 function computeJumpCommandLines(
   totalFrames: number,
   commands: Record<string, string> | undefined,
@@ -191,62 +208,129 @@ function computeJumpCommandLines(
   for (let t = 1; t <= totalFrames; t++) {
     const cmdStr = commands[String(t)];
     if (!cmdStr) continue;
-    const a = cmdStr.toLowerCase().split(";").map((s) => s.trim()).filter(Boolean);
-    const nextCmdStr = commands[String(t + 1)];
-    const s = nextCmdStr ? nextCmdStr.toLowerCase().split(";").map((str) => str.trim()).filter(Boolean) : [];
-    const pressedIndex = a.indexOf("+jump");
-    const releasedIndex = a.indexOf("-jump");
-    if (pressedIndex === -1 && releasedIndex === -1) continue;
-
-    const btnCur = btns[t - 1] ?? 0;
-    const btnNext = btns[t] ?? 0;
-    const f2Next = f2[t] ?? 0;
+    const a = cmdStr.toLowerCase().split(";").map((s) => s.trim());
+    const s = (commands[String(t + 1)] || "").toLowerCase().split(";").map((str) => str.trim());
+    const r = a.indexOf("+jump");
+    const n = a.indexOf("-jump");
+    if (r === -1 && n === -1) continue;
 
     let color: number | undefined;
-    if (releasedIndex !== -1 && pressedIndex !== -1) {
-      if (releasedIndex > pressedIndex) {
-        color = (f2Next === 1315) ? 0x00FF00 : 0x008800;
-      } else if (s.indexOf("-jump") !== -1 && s.indexOf("+jump") === -1) {
-        color = 0xFF00FF;
-      } else {
-        color = 0x00FFFF;
-      }
-    } else if (pressedIndex !== -1) {
-      color = 0xFF0000;
-    } else if (releasedIndex !== -1) {
-      color = 0x0000FF;
+    if (n !== -1 && r !== -1) {
+      color = n > r
+        ? ((f2[t + 1] ?? 0) === 1315 ? 65280 : 34816)
+        : (s.indexOf("-jump") !== -1 && s.indexOf("+jump") === -1 ? 16711935 : 65535);
+    } else if (r !== -1) {
+      color = 16711680;
+    } else if (n !== -1) {
+      color = 255;
     }
 
-    if (pressedIndex !== -1 && !(btnNext & 2)) {
-      color = 0xFFFFFF;
+    if (r !== -1 && ~btns[t + 1] & 2) {
+      color = 16777215;
     }
-    if (f2Next === 1315 && (btnCur & 2)) {
-      color = 0xFFAA00;
+    if ((f2[t + 1] ?? 0) === 1315 && ((btns[t] ?? 0) & 2)) {
+      color = 16755200;
     }
-    if (a.indexOf("+jump", pressedIndex + 1) !== -1 && a.indexOf("-jump", releasedIndex + 1) !== -1) {
-      color = 0xFF00FF;
-    }
-
-    // Upstream Unique-KZ fallback: non-canonical / isolated command lines resolve to
-    // jumpoff (#00FF00) or air scroll (#008800) if pulse, or are discarded (matching upstream return;).
-    if (color !== undefined && [0xFFFFFF, 0xFF0000, 0x0000FF, 0x00FFFF, 0xFF00FF].indexOf(color) !== -1) {
-      const isPulse = (btnCur & 2) !== 0 && (btnNext & 2) === 0;
-      if (f2Next === 1315) {
-        color = 0x00FF00;
-      } else if (isPulse) {
-        color = 0x008800;
-      } else {
-        continue;
-      }
+    if (a.indexOf("+jump", r + 1) !== -1 && a.indexOf("-jump", n + 1) !== -1) {
+      color = 16711935;
     }
 
     if (color !== undefined) {
-      const isSpecial = [0x00FF00, 0x008800, 0xFFAA00].indexOf(color) === -1;
+      const isNotCanonical = [65280, 34816, 16711680, 255].indexOf(color) === -1;
       lines.push({
         frame: t,
         color: `#${color.toString(16).padStart(6, "0")}`,
-        yOffset: isSpecial ? 2.5 : 0,
-        h: isSpecial ? 17 : 22
+        yOffset: isNotCanonical ? 2.5 : 0,
+        h: isNotCanonical ? 17 : 22
+      });
+    }
+  }
+  return lines;
+}
+
+function computeDuckCommandLines(
+  totalFrames: number,
+  commands: Record<string, string> | undefined,
+  flags: number[] | undefined,
+  buttons: number[] | undefined
+): Array<{ frame: number; color: string; yOffset: number; h: number }> {
+  if (!commands) return [];
+  const lines: Array<{ frame: number; color: string; yOffset: number; h: number }> = [];
+  const fl = flags ?? [];
+  const btns = buttons ?? [];
+
+  for (let t = 1; t <= totalFrames; t++) {
+    const cmdStr = commands[String(t)];
+    if (!cmdStr) continue;
+    const a = cmdStr.toLowerCase().split(";").map((s) => s.trim());
+    const s = (commands[String(t + 1)] || "").toLowerCase().split(";").map((str) => str.trim());
+    const r = a.indexOf("+duck");
+    const n = a.indexOf("-duck");
+    if (r === -1 && n === -1) continue;
+
+    let color: number | undefined;
+    if (n !== -1 && r !== -1) {
+      if (r + 1 === n) {
+        color = ((fl[t] ?? 0) & 512) ? 65280 : 26112; // 65280 = #00FF00 (ground), 26112 = #006600 (air)
+      } else if (s.indexOf("-duck") !== -1 && s.indexOf("+duck") === -1) {
+        color = 16711935;
+      }
+    } else if (r !== -1) {
+      color = 16711680;
+    } else if (n !== -1) {
+      color = 255;
+    }
+
+    if (r !== -1 && ~(btns[t + 1] ?? 0) & 4) {
+      color = 16777215;
+    }
+    if (a.indexOf("+duck", r + 1) !== -1 && a.indexOf("-duck", n + 1) !== -1) {
+      color = 16711935;
+    }
+
+    if (color !== undefined) {
+      const isNotCanonical = [65280, 26112, 16711680, 255].indexOf(color) === -1;
+      lines.push({
+        frame: t,
+        color: `#${color.toString(16).padStart(6, "0")}`,
+        yOffset: isNotCanonical ? -2.5 : 0,
+        h: isNotCanonical ? 17.5 : 15
+      });
+    }
+  }
+  return lines;
+}
+
+function computeUseCommandLines(
+  totalFrames: number,
+  commands: Record<string, string> | undefined
+): Array<{ frame: number; color: string; yOffset: number; h: number }> {
+  if (!commands) return [];
+  const lines: Array<{ frame: number; color: string; yOffset: number; h: number }> = [];
+
+  for (let t = 1; t <= totalFrames; t++) {
+    const cmdStr = commands[String(t)];
+    if (!cmdStr) continue;
+    const a = cmdStr.toLowerCase().split(";").map((s) => s.trim());
+    const r = a.indexOf("+use");
+    const n = a.indexOf("-use");
+    if (r === -1 && n === -1) continue;
+
+    let color: number | undefined;
+    if (n !== -1 && r !== -1) {
+      color = r + 1 === n ? 65280 : 16711935;
+    } else if (r !== -1) {
+      color = 16711680;
+    } else if (n !== -1) {
+      color = 255;
+    }
+
+    if (color !== undefined) {
+      lines.push({
+        frame: t,
+        color: `#${color.toString(16).padStart(6, "0")}`,
+        yOffset: 0,
+        h: 15
       });
     }
   }
@@ -796,26 +880,108 @@ export function App() {
     }));
   }, [dataset]);
 
-  const forwardBase = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.forward, 1) : [], [dataset]);
-  const backBase = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.back, 1) : [], [dataset]);
-  const moveleftBase = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.moveleft, 1) : [], [dataset]);
-  const moverightBase = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.moveright, 1) : [], [dataset]);
-
-  const groundSegments = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.ground, 2) : [], [dataset]);
-  const duckSegments = useMemo(() => dataset ? buildSegmentsWithMinGap(dataset.lanes.duck, 1) : [], [dataset]);
-  const useSegments = useMemo(() => (dataset && dataset.lanes.use ? buildSegmentsWithMinGap(dataset.lanes.use, 1) : []), [dataset]);
-
-  const duckstate1Segments = useMemo(() => {
+  const forwardMove = useMemo(() => dataset ? etUpstream(totalFrames, (t) => Boolean((dataset.dense.buttons[t] ?? 0) & 8)) : [], [dataset, totalFrames]);
+  const forwardPitch = useMemo(() => {
     if (!dataset) return [];
-    const mask = dataset.lanes.duckstate.map((v) => (v === 1 ? 1 : 0));
-    return buildSegmentsWithMinGap(mask, 1);
-  }, [dataset]);
+    const pitch = dataset.dense.pitch ?? [];
+    return etUpstream(totalFrames, (t) => {
+      if (t <= 1) return false;
+      let e = (pitch[t] ?? 0) - (pitch[t - 1] ?? 0);
+      if (e < -180) e += 360; else if (e > 180) e -= 360;
+      return e > 0;
+    });
+  }, [dataset, totalFrames]);
 
-  const duckstate2Segments = useMemo(() => {
+  const backMove = useMemo(() => dataset ? etUpstream(totalFrames, (t) => Boolean((dataset.dense.buttons[t] ?? 0) & 16)) : [], [dataset, totalFrames]);
+  const backPitch = useMemo(() => {
     if (!dataset) return [];
-    const mask = dataset.lanes.duckstate.map((v) => (v === 2 ? 1 : 0));
-    return buildSegmentsWithMinGap(mask, 1);
-  }, [dataset]);
+    const pitch = dataset.dense.pitch ?? [];
+    return etUpstream(totalFrames, (t) => {
+      if (t <= 1) return false;
+      let e = (pitch[t] ?? 0) - (pitch[t - 1] ?? 0);
+      if (e < -180) e += 360; else if (e > 180) e -= 360;
+      return e < 0;
+    });
+  }, [dataset, totalFrames]);
+
+  const moveleftMove = useMemo(() => dataset ? etUpstream(totalFrames, (t) => Boolean((dataset.dense.buttons[t] ?? 0) & 512)) : [], [dataset, totalFrames]);
+  const moveleftTurn = useMemo(() => {
+    if (!dataset) return [];
+    const mouseX = dataset.dense.mouseX;
+    return etUpstream(totalFrames, (t) => {
+      if (t <= 1) return false;
+      let e = (mouseX[t] ?? 0) - (mouseX[t - 1] ?? 0);
+      if (e < -180) e += 360; else if (e > 180) e -= 360;
+      return e > 0;
+    });
+  }, [dataset, totalFrames]);
+
+  const moverightMove = useMemo(() => dataset ? etUpstream(totalFrames, (t) => Boolean((dataset.dense.buttons[t] ?? 0) & 1024)) : [], [dataset, totalFrames]);
+  const moverightTurn = useMemo(() => {
+    if (!dataset) return [];
+    const mouseX = dataset.dense.mouseX;
+    return etUpstream(totalFrames, (t) => {
+      if (t <= 1) return false;
+      let e = (mouseX[t] ?? 0) - (mouseX[t - 1] ?? 0);
+      if (e < -180) e += 360; else if (e > 180) e -= 360;
+      return e < 0;
+    });
+  }, [dataset, totalFrames]);
+
+  const freezetimeSegments = useMemo(() => dataset ? etUpstream(totalFrames, (t) => Boolean((dataset.dense.iuser3?.[t] ?? 0) & 2)) : [], [dataset, totalFrames]);
+  const movetypeFly = useMemo(() => dataset ? etUpstream(totalFrames, (t) => (dataset.dense.movetype?.[t] ?? 3) === 5) : [], [dataset, totalFrames]);
+  const movetypeNoclip = useMemo(() => dataset ? etUpstream(totalFrames, (t) => (dataset.dense.movetype?.[t] ?? 3) === 8) : [], [dataset, totalFrames]);
+  const movetypeNone = useMemo(() => dataset ? etUpstream(totalFrames, (t) => (dataset.dense.movetype?.[t] ?? 3) === 0) : [], [dataset, totalFrames]);
+  const movetypeToss = useMemo(() => dataset ? etUpstream(totalFrames, (t) => (dataset.dense.movetype?.[t] ?? 3) === 6) : [], [dataset, totalFrames]);
+
+  const groundLayers = useMemo(() => {
+    if (!dataset) return [];
+    const flags = dataset.dense.flags;
+    const layers = [
+      { flag: 512, color: "#555555", offset: 0 },
+      { flag: 4096, color: "#ffff00", offset: 3 },
+      { flag: 1 << 31, color: "#ff8800", offset: 3 },
+      { flag: 16, color: "#0000ff", offset: 3 },
+      { flag: 2048, color: "#0099ff", offset: 3 }
+    ];
+    return layers.map((layer) => ({
+      ...layer,
+      segments: etUpstream(totalFrames, (t) => Boolean((flags[t] ?? 0) & layer.flag))
+    }));
+  }, [dataset, totalFrames]);
+
+  const duckHoldSegments = useMemo(() => {
+    if (!dataset) return [];
+    const btns = dataset.dense.buttons;
+    const cmds = dataset.sparse.commands;
+    return etUpstream(totalFrames, (t) => {
+      if (~(btns[t + 1] ?? 0) & 4) return false;
+      const e = (cmds[String(t)] || "").toLowerCase().split(";").map((s) => s.trim());
+      return e.indexOf("+duck") === -1 || e.indexOf("-duck") === -1;
+    });
+  }, [dataset, totalFrames]);
+
+  const duckCommandLines = useMemo(() => {
+    return dataset
+      ? computeDuckCommandLines(
+          totalFrames,
+          dataset.sparse.commands,
+          dataset.dense.flags,
+          dataset.dense.buttons
+        )
+      : [];
+  }, [dataset, totalFrames]);
+
+  const jumpHoldSegments = useMemo(() => {
+    if (!dataset) return [];
+    const btns = dataset.dense.buttons;
+    const cmds = dataset.sparse.commands;
+    return etUpstream(totalFrames, (t) => {
+      if (~(btns[t + 1] ?? 0) & 2) return false;
+      const e = (cmds[String(t)] || "").toLowerCase().split(";").map((s) => s.trim());
+      return e.indexOf("+jump") === -1 || e.indexOf("-jump") === -1;
+    });
+  }, [dataset, totalFrames]);
 
   const jumpCommandLines = useMemo(() => {
     return dataset
@@ -826,6 +992,37 @@ export function App() {
           dataset.dense.buttons
         )
       : [];
+  }, [dataset, totalFrames]);
+
+  const useHoldSegments = useMemo(() => {
+    if (!dataset) return [];
+    return etUpstream(totalFrames, (t) => Boolean((dataset.dense.buttons[t] ?? 0) & 32));
+  }, [dataset, totalFrames]);
+
+  const useCommandLines = useMemo(() => {
+    return dataset ? computeUseCommandLines(totalFrames, dataset.sparse.commands) : [];
+  }, [dataset, totalFrames]);
+
+  const duckstate1Segments = useMemo(() => {
+    if (!dataset) return [];
+    const bInDuck = dataset.dense.bInDuck ?? [];
+    const flags = dataset.dense.flags;
+    return etUpstream(totalFrames, (t) => {
+      const e = Boolean(bInDuck[t]);
+      const i = Boolean((flags[t] ?? 0) & 16384);
+      return e && !i;
+    });
+  }, [dataset, totalFrames]);
+
+  const duckstate2Segments = useMemo(() => {
+    if (!dataset) return [];
+    const bInDuck = dataset.dense.bInDuck ?? [];
+    const flags = dataset.dense.flags;
+    return etUpstream(totalFrames, (t) => {
+      const e = Boolean(bInDuck[t]);
+      const i = Boolean((flags[t] ?? 0) & 16384);
+      return !e && i;
+    });
   }, [dataset, totalFrames]);
 
 
@@ -1319,16 +1516,84 @@ export function App() {
                         />
 
                         {/* Lane-specific contents */}
+                        {lane.key === "freezetime" &&
+                          freezetimeSegments.map((seg, sidx) => (
+                            <rect
+                              key={`fzt-${sidx}`}
+                              x={seg.start}
+                              y={top}
+                              width={Math.max(1, seg.end - seg.start + 1)}
+                              height={h}
+                              fill="#00cccc"
+                            />
+                          ))}
+
+                        {lane.key === "movetype" && (
+                          <>
+                            {movetypeFly.map((seg, sidx) => (
+                              <rect
+                                key={`mt-f-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#00ffff"
+                              />
+                            ))}
+                            {movetypeNoclip.map((seg, sidx) => (
+                              <rect
+                                key={`mt-nc-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#ff00ff"
+                              />
+                            ))}
+                            {movetypeNone.map((seg, sidx) => (
+                              <rect
+                                key={`mt-no-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#ff0000"
+                              />
+                            ))}
+                            {movetypeToss.map((seg, sidx) => (
+                              <rect
+                                key={`mt-t-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#880000"
+                              />
+                            ))}
+                          </>
+                        )}
+
                         {lane.key === "use" && (
                           <>
-                            {useSegments.map((seg, sidx) => (
+                            {useHoldSegments.map((seg, sidx) => (
                               <rect
-                                key={`use-${sidx}`}
+                                key={`use-h-${sidx}`}
                                 x={seg.start}
                                 y={top}
                                 width={Math.max(1, seg.end - seg.start + 1)}
                                 height={h}
                                 fill="#555555"
+                              />
+                            ))}
+                            {useCommandLines.map((cmd, cidx) => (
+                              <rect
+                                key={`use-c-${cidx}`}
+                                x={cmd.frame}
+                                y={top}
+                                width={1}
+                                height={h}
+                                fill={cmd.color}
+                                shapeRendering="crispEdges"
                               />
                             ))}
                           </>
@@ -1348,10 +1613,10 @@ export function App() {
                               >
                                 <rect x={jump.startFrame} y={top} width={w} height={h} fill={jump.color} />
                                 {isBhop && (
-                                  <>
-                                    <circle cx={jump.startFrame} cy={top + 7.5} r={5.5} fill="#444444" />
-                                    <circle cx={jump.startFrame} cy={top + 7.5} r={4.5} fill={markerColor} />
-                                  </>
+                                   <>
+                                     <circle cx={jump.startFrame} cy={top + 7.5} r={5.5} fill="#444444" />
+                                     <circle cx={jump.startFrame} cy={top + 7.5} r={4.5} fill={markerColor} />
+                                   </>
                                 )}
                                 <text
                                   x={jump.startFrame + w / 2}
@@ -1368,45 +1633,68 @@ export function App() {
                             );
                           })}
 
-                        {lane.key === "jump" &&
-                          jumpCommandLines.map((cmd, cidx) => (
-                            <rect
-                              key={`jmpc-${cidx}`}
-                              x={cmd.frame}
-                              y={top + cmd.yOffset}
-                              width={1}
-                              height={cmd.h}
-                              fill={cmd.color}
-                              shapeRendering="crispEdges"
-                            />
-                          ))}
+                        {lane.key === "jump" && (
+                          <>
+                            {jumpHoldSegments.map((seg, sidx) => (
+                              <rect
+                                key={`jmp-h-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#555555"
+                              />
+                            ))}
+                            {jumpCommandLines.map((cmd, cidx) => (
+                              <rect
+                                key={`jmp-c-${cidx}`}
+                                x={cmd.frame}
+                                y={top + cmd.yOffset}
+                                width={1}
+                                height={cmd.h}
+                                fill={cmd.color}
+                                shapeRendering="crispEdges"
+                              />
+                            ))}
+                          </>
+                        )}
 
                         {lane.key === "ground" &&
-                          groundSegments.map((seg, sidx) => (
-                            <rect
-                              key={`grd-${sidx}`}
-                              x={seg.start}
-                              y={top}
-                              width={Math.max(1, seg.end - seg.start + 1)}
-                              height={h}
-                              fill="#555555"
-                            />
-                          ))}
+                          groundLayers.map((layer, lidx) =>
+                            layer.segments.map((seg, sidx) => (
+                              <rect
+                                key={`grd-${lidx}-${sidx}`}
+                                x={seg.start}
+                                y={top + layer.offset}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h - 2 * layer.offset}
+                                fill={layer.color}
+                              />
+                            ))
+                          )}
 
                         {lane.key === "duck" && (
                           <>
-                            {duckSegments.map((seg, sidx) => (
-                              <g key={`dck-${sidx}`}>
-                                <rect
-                                  x={seg.start}
-                                  y={top}
-                                  width={Math.max(1, seg.end - seg.start + 1)}
-                                  height={h}
-                                  fill="#555555"
-                                />
-                                <line x1={seg.start} y1={top} x2={seg.start} y2={top + h} stroke="#ff0000" strokeWidth={1} />
-                                <line x1={seg.end + 1} y1={top} x2={seg.end + 1} y2={top + h} stroke="#0000ff" strokeWidth={1} />
-                              </g>
+                            {duckHoldSegments.map((seg, sidx) => (
+                              <rect
+                                key={`dck-h-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={h}
+                                fill="#555555"
+                              />
+                            ))}
+                            {duckCommandLines.map((cmd, cidx) => (
+                              <rect
+                                key={`dck-c-${cidx}`}
+                                x={cmd.frame}
+                                y={top + cmd.yOffset}
+                                width={1}
+                                height={cmd.h}
+                                fill={cmd.color}
+                                shapeRendering="crispEdges"
+                              />
                             ))}
                           </>
                         )}
@@ -1420,7 +1708,7 @@ export function App() {
                                 y={top}
                                 width={Math.max(1, seg.end - seg.start + 1)}
                                 height={h}
-                                fill="#ffa000"
+                                fill="#FF8800"
                               />
                             ))}
                             {duckstate2Segments.map((seg, sidx) => (
@@ -1438,14 +1726,24 @@ export function App() {
 
                         {lane.key === "forward" && (
                           <>
-                            {forwardBase.map((seg, sidx) => (
+                            {forwardMove.map((seg, sidx) => (
                               <rect
-                                key={`fwd-${sidx}`}
+                                key={`fwd-m-${sidx}`}
                                 x={seg.start}
                                 y={top}
                                 width={Math.max(1, seg.end - seg.start + 1)}
                                 height={h}
                                 fill="#555555"
+                              />
+                            ))}
+                            {forwardPitch.map((seg, sidx) => (
+                              <rect
+                                key={`fwd-p-${sidx}`}
+                                x={seg.start}
+                                y={top + 7.5}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={7.5}
+                                fill="#888888"
                               />
                             ))}
                           </>
@@ -1453,14 +1751,24 @@ export function App() {
 
                         {lane.key === "back" && (
                           <>
-                            {backBase.map((seg, sidx) => (
+                            {backMove.map((seg, sidx) => (
                               <rect
-                                key={`bck-${sidx}`}
+                                key={`bck-m-${sidx}`}
                                 x={seg.start}
                                 y={top}
                                 width={Math.max(1, seg.end - seg.start + 1)}
                                 height={h}
                                 fill="#555555"
+                              />
+                            ))}
+                            {backPitch.map((seg, sidx) => (
+                              <rect
+                                key={`bck-p-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={7.5}
+                                fill="#888888"
                               />
                             ))}
                           </>
@@ -1468,9 +1776,9 @@ export function App() {
 
                         {lane.key === "moveleft" && (
                           <>
-                            {moveleftBase.map((seg, sidx) => (
+                            {moveleftMove.map((seg, sidx) => (
                               <rect
-                                key={`ml-${sidx}`}
+                                key={`ml-m-${sidx}`}
                                 x={seg.start}
                                 y={top}
                                 width={Math.max(1, seg.end - seg.start + 1)}
@@ -1478,19 +1786,39 @@ export function App() {
                                 fill="#555555"
                               />
                             ))}
+                            {moveleftTurn.map((seg, sidx) => (
+                              <rect
+                                key={`ml-t-${sidx}`}
+                                x={seg.start}
+                                y={top + 7.5}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={7.5}
+                                fill="#888888"
+                              />
+                            ))}
                           </>
                         )}
 
                         {lane.key === "moveright" && (
                           <>
-                            {moverightBase.map((seg, sidx) => (
+                            {moverightMove.map((seg, sidx) => (
                               <rect
-                                key={`mr-${sidx}`}
+                                key={`mr-m-${sidx}`}
                                 x={seg.start}
                                 y={top}
                                 width={Math.max(1, seg.end - seg.start + 1)}
                                 height={h}
                                 fill="#555555"
+                              />
+                            ))}
+                            {moverightTurn.map((seg, sidx) => (
+                              <rect
+                                key={`mr-t-${sidx}`}
+                                x={seg.start}
+                                y={top}
+                                width={Math.max(1, seg.end - seg.start + 1)}
+                                height={7.5}
+                                fill="#888888"
                               />
                             ))}
                           </>
@@ -1510,21 +1838,21 @@ export function App() {
                   />
 
                   {/* Vertical Start & Stop Lines: red #ff0000 */}
-                  {dataset.meta.startFrame !== undefined && (
+                  {dataset.meta.timer?.startFrame !== undefined && dataset.meta.timer.startFrame > 0 && (
                     <line
-                      x1={dataset.meta.startFrame}
+                      x1={dataset.meta.timer.startFrame}
                       y1={0}
-                      x2={dataset.meta.startFrame}
+                      x2={dataset.meta.timer.startFrame}
                       y2={graphHeight}
                       stroke="#ff0000"
                       strokeWidth={1}
                     />
                   )}
-                  {dataset.meta.stopFrame !== undefined && (
+                  {dataset.meta.timer?.stopFrame !== undefined && dataset.meta.timer.stopFrame > 0 && (
                     <line
-                      x1={dataset.meta.stopFrame}
+                      x1={dataset.meta.timer.stopFrame}
                       y1={0}
-                      x2={dataset.meta.stopFrame}
+                      x2={dataset.meta.timer.stopFrame}
                       y2={graphHeight}
                       stroke="#ff0000"
                       strokeWidth={1}

@@ -62,10 +62,11 @@ export async function parseDemoFileLocally(file: File): Promise<GraphViewerDatas
   const velocityXY = velocityX.map((vx, i) => Math.hypot(vx, velocityY[i] ?? 0));
   const buttons = frames.map((f) => f.cmd.buttons);
   const flDucking = frames.map((f) => (f.viewheight?.[2] ?? 28) <= 13.0);
-  const flags = frames.map((f, i) => (f.onground !== 0 ? 512 : 0) | (flDucking[i] ? 16384 : 0));
+  const isDucking = flDucking;
+  const bInDuck = frames.map((f, i) => (((f.cmd.buttons & (1 << 2)) !== 0) && !isDucking[i] && (f.onground !== 0) ? 1 : 0));
+  const flags = frames.map((f, i) => (f.onground !== 0 ? 512 : 0) | (isDucking[i] ? 16384 : 0));
   const health = frames.map((f) => f.health);
   const onground = frames.map((f) => (f.onground !== 0 ? 1 : 0));
-  const bInDuck = frames.map((f) => ((f.cmd.buttons & (1 << 2)) !== 0 ? 1 : 0));
   const minsZ = frames.map((f, i) => (flDucking[i] ? -18 : -36));
 
   const jumpHeightDemo = new Array<number>(totalFrames);

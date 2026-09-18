@@ -168,6 +168,7 @@ export interface GraphViewerDataset {
     upmove: number[];
     maxspeed: number[];
     fuser2?: number[];
+    iuser3?: number[];
     pitch?: number[];
     yaw?: number[];
     weapon?: string[];
