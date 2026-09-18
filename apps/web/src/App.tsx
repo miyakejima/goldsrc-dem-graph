@@ -231,8 +231,10 @@ function computeJumpCommandLines(
     // jumpoff (#00FF00) or air scroll (#008800) if pulse, or are discarded (matching upstream return;).
     if (color !== undefined && [0xFFFFFF, 0xFF0000, 0x0000FF, 0x00FFFF, 0xFF00FF].indexOf(color) !== -1) {
       const isPulse = (btnCur & 2) !== 0 && (btnNext & 2) === 0;
-      if (isPulse) {
-        color = (f2Next === 1315) ? 0x00FF00 : 0x008800;
+      if (f2Next === 1315) {
+        color = 0x00FF00;
+      } else if (isPulse) {
+        color = 0x008800;
       } else {
         continue;
       }
