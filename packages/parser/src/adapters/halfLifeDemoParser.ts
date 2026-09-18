@@ -255,87 +255,6 @@ function readUInt8At(payload: Buffer, offset: number): number | null {
   return payload.readUInt8(offset);
 }
 
-function findGameDataFrameBoundary(params: {
-  reader: Reader;
-  dataStart: number;
-  segmentEnd: number;
-  frameNumber: number;
-  allowType0: boolean;
-}): { payloadLength: number; msgLength: number } | null {
-  const { reader, dataStart, segmentEnd, frameNumber, allowType0 } = params;
-
-  for (let payloadLength = 440; payloadLength <= 560; payloadLength += 1) {
-    const msgSizePos = dataStart + payloadLength;
-    if (msgSizePos + 4 > segmentEnd) {
-      continue;
-    }
-
-    const msgLength = reader.peekUInt32LE(msgSizePos);
-    const nextFramePos = msgSizePos + 4 + msgLength;
-
-    if (nextFramePos === segmentEnd) {
-      return { payloadLength, msgLength };
-    }
-
-    if (nextFramePos + 9 > segmentEnd) {
-      continue;
-    }
-
-    const nextType = reader.peekUInt8(nextFramePos);
-    if (nextType < 0 || nextType > 9) {
-      continue;
-    }
-    if (!allowType0 && nextType === 0) {
-      continue;
-    }
-
-    const nextFrameNumber = reader.peekInt32LE(nextFramePos + 5);
-    if (nextFrameNumber < frameNumber || nextFrameNumber > frameNumber + 4096) {
-      continue;
-    }
-
-    return { payloadLength, msgLength };
-  }
-
-  return null;
-}
-
-function findNextFrameHeaderPosition(params: {
-  reader: Reader;
-  dataStart: number;
-  segmentEnd: number;
-  frameNumber: number;
-  frameTime: number;
-  allowType0: boolean;
-}): number | null {
-  const { reader, dataStart, segmentEnd, frameNumber, frameTime, allowType0 } = params;
-  const searchEnd = Math.min(segmentEnd - 9, dataStart + 20000);
-
-  for (let pos = dataStart + 1; pos <= searchEnd; pos += 1) {
-    const type = reader.peekUInt8(pos);
-    if (type < 0 || type > 9) {
-      continue;
-    }
-    if (!allowType0 && type === 0) {
-      continue;
-    }
-
-    const decodedTime = reader.peekFloatLE(pos + 1);
-    if (!Number.isFinite(decodedTime) || decodedTime < frameTime - 0.25 || decodedTime > frameTime + 5) {
-      continue;
-    }
-
-    const nextFrame = reader.peekInt32LE(pos + 5);
-    if (nextFrame < frameNumber || nextFrame > frameNumber + 8192) {
-      continue;
-    }
-
-    return pos;
-  }
-
-  return null;
-}
-
 function parseGameDataFrameData(
   reader: Reader,
   warnings: string[],
@@ -396,81 +315,18 @@ function parseGameDataFrameData(
     };
   }
 
-  const dataStart = reader.position;
-  const boundary = findGameDataFrameBoundary({
-    reader,
-    dataStart,
-    segmentEnd,
-    frameNumber,
-    allowType0
-  });
-
-  let payloadLength = boundary?.payloadLength;
-  let msgLength = boundary?.msgLength;
-  let resyncPosition: number | null = null;
-
-  if (!boundary) {
-    resyncPosition = findNextFrameHeaderPosition({
-      reader,
-      dataStart,
-      segmentEnd,
-      frameNumber,
-      frameTime,
-      allowType0
-    });
-    payloadLength = Math.min(460, Math.max(0, (resyncPosition ?? segmentEnd) - dataStart));
-    msgLength = 0;
-    warnings.push(
-      `Could not detect message boundary for frame ${frameNumber}; ` +
-        `${resyncPosition ? `resynced at ${resyncPosition}` : "using fallback consumption"}`
-    );
-  }
-
-  const payload = reader.readBytes(Math.min(payloadLength ?? 460, Math.max(0, segmentEnd - reader.position)));
-  if (resyncPosition !== null) {
-    reader.position = resyncPosition;
-  }
-
-  if (reader.position + 4 > segmentEnd || msgLength === undefined) {
-    warnings.push(`Missing msg_size field for frame ${frameNumber}.`);
-    return {
-      frametime: payload.length >= 68 ? payload.readFloatLE(64) : null,
-      paused: readUIntAt(payload, 76),
-      playerNum: readUIntAt(payload, 184),
-      refParams: {
-        vieworg: [readFloatAt(payload, 4), readFloatAt(payload, 8), readFloatAt(payload, 12)],
-        viewangles: [readFloatAt(payload, 16), readFloatAt(payload, 20), readFloatAt(payload, 24)],
-        clViewangles: [readFloatAt(payload, 132), readFloatAt(payload, 136), readFloatAt(payload, 140)],
-        punchangle: [readFloatAt(payload, 164), readFloatAt(payload, 168), readFloatAt(payload, 172)],
-        simvel: [readFloatAt(payload, 92), readFloatAt(payload, 96), readFloatAt(payload, 100)],
-        simorg: [readFloatAt(payload, 104), readFloatAt(payload, 108), readFloatAt(payload, 112)],
-        health: readUIntAt(payload, 144),
-        maxclients: readUIntAt(payload, 176),
-        viewentity: readUIntAt(payload, 180),
-        onground: readUIntAt(payload, 84),
-        waterlevel: readUIntAt(payload, 88),
-        spectator: readUIntAt(payload, 80),
-        intermission: readUIntAt(payload, 72),
-        viewsize: readFloatAt(payload, 160)
-      },
-      userCmdViewangles: [readFloatAt(payload, 240), readFloatAt(payload, 244), readFloatAt(payload, 248)],
-      cmd: {
-        forwardmove: readFloatAt(payload, 252),
-        sidemove: readFloatAt(payload, 256),
-        upmove: readFloatAt(payload, 260),
-        buttons: readUInt16At(payload, 266),
-        msec: readUInt8At(payload, 238)
-      },
-      movvars: parseMovvars(payload)
-    };
-  }
-  const declaredMsgLength = reader.readUInt32LE();
-  const effectiveMsgLength = msgLength ?? declaredMsgLength;
-  const safeMsgLength = Math.min(effectiveMsgLength, Math.max(0, segmentEnd - reader.position));
-  const msg = reader.readBytes(safeMsgLength);
-
-  if (msg.length > 0) {
-    parseUpdateUserInfoFromMsg(msg, playersBySlot);
+  let payload: Buffer;
+  if (reader.remaining() >= 468) {
+    payload = reader.readBytes(464);
+    const declaredMsgLength = reader.readUInt32LE();
+    const safeMsgLength = Math.min(declaredMsgLength, Math.max(0, segmentEnd - reader.position));
+    const msg = reader.readBytes(safeMsgLength);
+    if (msg.length > 0) {
+      parseUpdateUserInfoFromMsg(msg, playersBySlot);
+    }
+  } else {
+    const len = Math.min(464, Math.max(0, segmentEnd - reader.position));
+    payload = reader.readBytes(len);
   }
 
   const cmd = {
@@ -676,7 +532,7 @@ function parseSegmentFrames(reader: Reader, entry: RawDirectoryEntry, warnings: 
     }
 
     if (frameType === 6) {
-      reader.skip(84);
+      reader.skip(80);
       continue;
     }
 

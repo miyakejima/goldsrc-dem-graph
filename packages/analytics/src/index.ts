@@ -194,13 +194,17 @@ function detectJumps(input: AnalyticsInput): JumpMetrics[] {
     const landing = frames[landingIndex];
     const dx = landing.simorg[0] - takeoff.simorg[0];
     const dy = landing.simorg[1] - takeoff.simorg[1];
-    const dz = landing.simorg[2] - takeoff.simorg[2];
+    const takeoffDuck = (takeoff.cmd.buttons & IN_DUCK) !== 0;
+    const landingDuck = (landing.cmd.buttons & IN_DUCK) !== 0;
+    const takeoffFeetZ = takeoff.simorg[2] + (takeoffDuck ? -18.0 : -36.0);
+    const landingFeetZ = landing.simorg[2] + (landingDuck ? -18.0 : -36.0);
+    const groundElevationDelta = landingFeetZ - takeoffFeetZ;
 
     // Standard GoldSrc KZ 2D jump distance includes 32.0 bounding box width
     const distanceXyVal = Math.sqrt(dx * dx + dy * dy) + 32.0;
 
     // Vertical height adjustment
-    const distanceVal = dz !== 0 ? Math.sqrt(distanceXyVal * distanceXyVal + dz * dz) : distanceXyVal;
+    const distanceVal = groundElevationDelta !== 0 ? Math.sqrt(distanceXyVal * distanceXyVal + groundElevationDelta * groundElevationDelta) : distanceXyVal;
 
     // Filter out micro hops or falls
     if (distanceXyVal < 140.0 && airFrames.length < 30) {
@@ -233,10 +237,10 @@ function detectJumps(input: AnalyticsInput): JumpMetrics[] {
 
     // Jump classification:
     // Type 2 = Bhop / Standup Bhop (FOG <= 3)
-    // Type 1 = Highjump (elevation diff abs(dz) >= 2.0)
-    // Type 0 = Longjump (flat ground, abs(dz) < 2.0)
+    // Type 1 = Highjump (landing block significantly lower by >= 10.0 units)
+    // Type 0 = Longjump (flat ground surface)
     const isBhop = fog <= 3;
-    const isHighJump = !isBhop && Math.abs(dz) >= 2.0;
+    const isHighJump = !isBhop && groundElevationDelta <= -10.0;
     const typeVal = isBhop ? 2 : (isHighJump ? 1 : 0);
     const isStandup = isBhop ? (takeoff.cmd.buttons & IN_DUCK) === 0 : null;
     const isIdealBhop = isBhop ? fog <= 2 : null;
